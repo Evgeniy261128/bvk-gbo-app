@@ -4,8 +4,8 @@
   "description": "Объединенный автосервис в Санкт-Петербурге",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#121316",
-  "theme_color": "#121316",
+  "background_color": "#F4F6F9",
+  "theme_color": "#F4F6F9",
   "icons": [
     {
       "src": "/favicon.svg",
