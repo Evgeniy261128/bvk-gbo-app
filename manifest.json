@@ -1,0 +1,16 @@
+{
+  "name": "BVK-AUTOSERVIS + МирГбоСПб",
+  "short_name": "BVK-GBO",
+  "description": "Объединенный автосервис в Санкт-Петербурге",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121316",
+  "theme_color": "#121316",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

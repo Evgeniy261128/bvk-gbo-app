@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BVK-AUTOSERVIS + МирГбоСПб | Автосервис в СПб</title>
+  <meta name="description"
+    content="Объединенный автосервис BVK-AUTOSERVIS и сервис ГБО МирГбоСПб в Санкт-Петербурге (шоссе Революции, 65)." />
+  <meta name="theme-color" content="#121316" />
+  <link rel="manifest" href="./manifest.json" />
+
+  <!-- Прямое подключение Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            graphite: '#121316',
+            'bvo-green': '#2E8B57',
+            'bvo-green-light': '#4CAF50',
+            'gbo-red': '#D32F2F',
+            'gbo-red-light': '#FF5252',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Чистый CSS без @layer, чтобы Vite/PostCSS не выдавал ошибку -->
+  <style>
+    html,
+    body,
+    #root {
+      background-color: #121316 !important;
+      color: #f3f4f6;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      background-color: #1C1E24;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 1rem;
+      padding: 1rem;
+    }
+
+    .neon-green {
+      box-shadow: 0 0 20px rgba(46, 139, 87, 0.45), 0 0 40px rgba(76, 175, 80, 0.25);
+    }
+
+    .neon-red {
+      box-shadow: 0 0 20px rgba(211, 47, 47, 0.45), 0 0 40px rgba(255, 82, 82, 0.25);
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/index-HnfhhlQg.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-tn0RQdqM.css">
+</head>
+
+<body class="bg-[#121316] text-gray-100 antialiased">
+  <div id="root"></div>
+</body>
+
+</html>
