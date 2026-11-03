@@ -3,14 +3,14 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="./logo192.png" />
-  <link rel="apple-touch-icon" href="./logo192.png" />
+  <link rel="icon" type="image/png" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>BVK-AUTOSERVIS + МирГбоСПб | Автосервис в СПб</title>
   <meta name="description"
     content="Объединенный автосервис BVK-AUTOSERVIS и сервис ГБО МирГбоСПб в Санкт-Петербурге (шоссе Революции, 65)." />
   <meta name="theme-color" content="#6b21a8" />
-  <link rel="manifest" href="./manifest.json" />
+  <link rel="manifest" href="./manifest.json?v=2" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
@@ -51,7 +51,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.register('./sw.js?v=2');
       });
     }
   </script>
