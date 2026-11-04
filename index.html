@@ -10,7 +10,17 @@
   <meta name="description"
     content="Объединенный автосервис BVK-AUTOSERVIS и сервис ГБО МирГбоСПб в Санкт-Петербурге (шоссе Революции, 65)." />
   <meta name="theme-color" content="#6b21a8" />
-  <link rel="manifest" href="./manifest.json?v=2" />
+  <link rel="manifest" href="./manifest.json?v=3" />
+  <script>
+    // Глобальный перехват beforeinstallprompt — до монтирования React,
+    // чтобы событие не потерять, даже если оно приходит очень рано.
+    window.__deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__deferredPrompt = e;
+      window.dispatchEvent(new Event('pwa-prompt-ready'));
+    });
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
@@ -42,7 +52,7 @@
       -webkit-font-smoothing: antialiased;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-BhRy2GUj.js"></script>
+  <script type="module" crossorigin src="./assets/index-C5KEhMrM.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-tn0RQdqM.css">
 </head>
 
@@ -51,7 +61,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2');
+        navigator.serviceWorker.register('./sw.js?v=3');
       });
     }
   </script>
