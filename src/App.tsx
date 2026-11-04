@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BRANDS, ADDRESS,
   formatDateTime, parsePrice,
@@ -308,15 +308,30 @@ const StepServices: React.FC<{
   selected: string[];
   onToggle: (id: string) => void;
   onOpenTimeSelection: () => void;
-  isTimeSelectionOpen: boolean;
   services: Service[];
-}> = ({ brand, selected, onToggle, onOpenTimeSelection, isTimeSelectionOpen, services }) => {
+  isBookingSectionVisible: boolean;
+}> = ({ brand, selected, onToggle, onOpenTimeSelection, services, isBookingSectionVisible }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [plateEntering, setPlateEntering] = useState(false);
+
+  // Плавное появление плашки итогов при возврате к каталогу услуг
+  useEffect(() => {
+    if (selected.length === 0 || isBookingSectionVisible) {
+      setPlateEntering(false);
+      return;
+    }
+    const raf = requestAnimationFrame(() => setPlateEntering(true));
+    return () => cancelAnimationFrame(raf);
+  }, [selected.length, isBookingSectionVisible]);
   const brandServices = useMemo(() => {
     return services
       .filter(s => s.brand === brand)
       .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [services, brand, searchQuery]);
+  const brandServicesTotal = useMemo(
+    () => services.filter(s => s.brand === brand).length,
+    [services, brand]
+  );
   const totalPrice = useMemo(
     () => selected.reduce((sum, id) => sum + parsePrice(services.find(s => s.id === id)?.price || '0'), 0),
     [selected, services]
@@ -329,7 +344,7 @@ const StepServices: React.FC<{
   return (
     <div className="relative w-full px-4 pb-28">
       {/* Sticky search header */}
-      <div className="sticky top-0 z-20 bg-[#F4F6F9] pt-2 pb-3">
+      <div className="sticky top-0 z-20 bg-gray-100 pt-2 pb-3">
         <h2 className="text-sm font-medium text-gray-700 mb-2">Выберите услугу</h2>
         <div className="relative">
           <input
@@ -337,9 +352,19 @@ const StepServices: React.FC<{
             placeholder="Поиск услуг..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+            className="w-full pl-10 pr-9 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          {searchQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-700 text-sm"
+              aria-label="Очистить поиск"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -376,22 +401,55 @@ const StepServices: React.FC<{
             </div>
           );
         })}
+
+        {/* Search reset helpers — shown while the search filter is active */}
+        {searchQuery.trim().length > 0 && (
+          brandServices.length === 0 ? (
+            <div className="p-6 text-center">
+              <p className="text-sm text-gray-500 mb-3">
+                Ничего не найдено по запросу «{searchQuery}»
+              </p>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="bg-[#F07427] hover:bg-[#d9631b] text-white font-medium px-6 py-2.5 rounded shadow text-sm"
+              >
+                Показать все услуги
+              </button>
+            </div>
+          ) : (
+            <div className="p-3">
+              <button
+                onClick={() => setSearchQuery('')}
+                className="w-full py-2 rounded bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm font-medium transition"
+              >
+                ✕ Показать все услуги (всего {brandServicesTotal})
+              </button>
+            </div>
+          )
+        )}
+
       </div>
 
-      {/* Fixed bottom panel — shown only when services are selected */}
+      {/* Единая плавающая плашка итогов — только в области каталога услуг */}
       {selected.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 p-4 shadow-2xl z-30">
-          <p className="text-center text-sm text-gray-700 mb-2">
+        <div
+          className={`fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 backdrop-blur border-t border-gray-200 py-3 px-4 shadow-lg flex flex-col items-center gap-1.5 transition-all duration-300 ${
+            isBookingSectionVisible
+              ? 'hidden'
+              : plateEntering
+                ? 'translate-y-0 opacity-100'
+                : 'translate-y-full opacity-0 pointer-events-none'
+          }`}
+        >
+          <p className="text-center text-sm text-gray-700">
             Выбрано услуг: {selected.length} ({formatDuration(totalDuration)}, {totalPrice} руб.)
           </p>
-          {!isTimeSelectionOpen && (
-            <button
-              onClick={onOpenTimeSelection}
-              className="w-full py-2.5 rounded bg-orange-500 text-white font-bold text-sm transition hover:opacity-90"
-            >
-              Выбрать время
-            </button>
-          )}
+          <button
+            onClick={onOpenTimeSelection}
+            className="w-full bg-[#F07427] hover:bg-[#d9631b] text-white font-medium px-6 py-2.5 rounded shadow"
+          >
+            Выбрать время
+          </button>
         </div>
       )}
     </div>
@@ -400,8 +458,8 @@ const StepServices: React.FC<{
 
 // ===== Step 2: Date & time (classic calendar) =====
 const MONTH_NAMES = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const MONTH_NAMES_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const DAY_NAMES_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const DAY_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
 
 function buildCalendarDays(year: number, month: number): Date[] {
   const firstDay = new Date(year, month, 1);
@@ -461,8 +519,8 @@ function isDateAvailable(d: Date, today: Date, bookings: Booking[], services: Se
   return true;
 }
 
-function formatDateHeader(d: Date): string {
-  const dayOfWeek = DAY_FULL[d.getDay()];
+function formatDateHeaderShort(d: Date): string {
+  const dayOfWeek = DAY_NAMES_SHORT[(d.getDay() + 6) % 7];
   const monthName = MONTH_NAMES[d.getMonth()];
   return `${dayOfWeek}, ${d.getDate()} ${monthName} ${d.getFullYear()} г.`;
 }
@@ -471,7 +529,7 @@ const StepDateTime: React.FC<{
   selectedDate: string;
   selectedTime: string | null;
   onDateChange: (d: string) => void;
-  onTimeChange: (t: string) => void;
+  onTimeChange: (t: string | null) => void;
   blockedMap: Map<string, string>;
   bookings: Booking[];
   services: Service[];
@@ -513,7 +571,7 @@ const StepDateTime: React.FC<{
           «
         </button>
         <h3 className="text-sm font-medium text-gray-900">
-          {MONTH_NAMES[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
+          {MONTH_NAMES_NOM[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
         </h3>
         <button onClick={handleNextMonth} className="px-2 py-1 text-gray-600 font-medium hover:text-gray-900">
           »
@@ -541,7 +599,8 @@ const StepDateTime: React.FC<{
           let bgClass = '';
 
           if (isSelected) {
-            bgClass = 'bg-slate-700 text-white';
+            bgClass = 'bg-[#1E4E79] text-white';
+            textClass = 'font-bold';
           } else if (isPast || isBooked) {
             if (!inMonth) {
               textClass = 'text-gray-300 opacity-60';
@@ -549,7 +608,7 @@ const StepDateTime: React.FC<{
               textClass = (isPast ? 'text-red-500' : 'text-gray-400');
             }
           } else if (inMonth) {
-            textClass = 'text-green-600 font-bold';
+            textClass = 'text-green-700 font-semibold';
           }
 
           return (
@@ -589,21 +648,21 @@ const StepDateTime: React.FC<{
         }
         return (
           <div className="mt-4">
-            <h3 className="text-xs font-medium text-gray-700 mb-2">Доступное время</h3>
+            <h3 className="text-sm font-medium text-[#1E4E79] text-center mb-2">Доступное время</h3>
             {availableSlots.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">Нет свободного времени на эту дату</p>
+              <p className="text-sm text-gray-500 text-center py-4">На этот день нет свободного времени</p>
             ) : (
               <div className="flex flex-wrap gap-2 justify-center">
                 {availableSlots.map((t) => {
                   const sel = selectedTime === t;
                   const cls = sel
-                    ? 'bg-purple-600 text-white border-purple-600'
+                    ? 'bg-[#7E22CE] text-white border-[#7E22CE]'
                     : 'border border-gray-300 text-gray-700 hover:bg-gray-50';
                   return (
                     <button
                       key={t}
-                      onClick={() => onTimeChange(t)}
-                      className={`py-2 px-4 rounded-full border text-sm font-medium transition ${cls}`}
+                      onClick={() => onTimeChange(selectedTime === t ? null : t)}
+                      className={`px-3 py-1.5 rounded border text-sm transition ${cls}`}
                     >
                       {t}
                     </button>
@@ -614,12 +673,6 @@ const StepDateTime: React.FC<{
           </div>
         );
       })()}
-
-      {selectedDate && selectedTime && (
-        <p className="mt-2 text-xs text-gray-500">
-          {formatDateHeader(parseLocalDate(selectedDate))} {selectedTime}
-        </p>
-      )}
     </div>
   );
 };
@@ -633,59 +686,62 @@ const StepContact: React.FC<{
   onBook: () => void;
   canBook: boolean;
   validationError: string | null;
-}> = ({ formData, onChange, selectedDate, selectedTime, onBook, canBook, validationError }) => {
+  innerRef: React.RefObject<HTMLDivElement | null>;
+}> = ({ formData, onChange, selectedDate, selectedTime, onBook, canBook, validationError, innerRef }) => {
   const inputCls = "w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500";
 
   return (
-    <div className="px-4 pb-24 space-y-3">
-      <h2 className="text-sm font-medium text-gray-700 mb-2">Ваш автомобиль и контакты</h2>
+    <div ref={innerRef} className="px-4 pb-24">
+      <div className="bg-white rounded shadow border border-gray-300 p-4 space-y-3">
+        {selectedDate && selectedTime && (
+          <p className="text-sm font-medium text-[#7E22CE]">
+            {formatDateHeaderShort(parseLocalDate(selectedDate))} {selectedTime}
+          </p>
+        )}
 
-      {selectedDate && selectedTime && (
-        <p className="text-xs text-gray-600">
-          {formatDateHeader(parseLocalDate(selectedDate))} {selectedTime}
-        </p>
-      )}
+        <p className="text-sm text-gray-500 mb-2">Укажите ваше имя и марку автомобиля</p>
 
-      <div className="relative">
-        <input type="text" placeholder="Имя" value={formData.name || ''}
-          onChange={e => onChange('name', e.target.value)} className={inputCls} />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">👤</span>
-      </div>
-
-      <div className="relative">
-        <input type="tel" placeholder="Телефон" value={formData.phone || ''}
-          onChange={e => onChange('phone', e.target.value)} className={inputCls} />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">📞</span>
-      </div>
-
-      <div className="relative">
-        <textarea
-          placeholder="Комментарий"
-          value={formData.comment || ''}
-          onChange={e => onChange('comment', e.target.value)}
-          rows={2}
-          className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-        />
-        <span className="absolute left-3 top-3 text-lg pointer-events-none">💬</span>
-      </div>
-
-      {validationError && (
-        <div className="bg-red-100 text-red-600 text-xs p-2 rounded">
-          Ошибка! Не заполнено поле {validationError}
+        <div className="relative">
+          <input type="text" placeholder="Например: Алексей (Kia Rio)" value={formData.name || ''}
+            onChange={e => onChange('name', e.target.value.replace(/[^a-zA-Zа-яА-ЯёЁ0-9\s-]/g, ''))} className={inputCls} />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">👤</span>
         </div>
-      )}
 
-      <div className="sticky bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-300 px-4 py-3">
-        <button
-          onClick={onBook}
-          disabled={!canBook}
-          className={`w-full py-2.5 rounded font-bold text-sm transition ${canBook
-              ? 'bg-purple-700 hover:opacity-90 text-white'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-        >
-          Записаться
-        </button>
+        <div className="relative">
+          <input type="tel" placeholder="+7..." value={formData.phone || ''}
+            onChange={e => onChange('phone', e.target.value)} className={inputCls} />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">📞</span>
+        </div>
+
+        <div className="relative">
+          <textarea
+            placeholder="Комментарий к заказу (необязательно)"
+            value={formData.comment || ''}
+            onChange={e => onChange('comment', e.target.value)}
+            rows={2}
+            className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+          />
+          <span className="absolute left-3 top-3 text-lg pointer-events-none">💬</span>
+        </div>
+
+        {validationError && (
+          <div className="bg-red-100 text-red-600 text-xs p-2 rounded">
+            Ошибка! Не заполнено поле {validationError}
+          </div>
+        )}
+
+        <div className="flex justify-center pt-1">
+          <button
+            onClick={onBook}
+            disabled={!canBook}
+            className={`px-8 py-2.5 rounded font-medium text-sm transition ${canBook
+                ? 'bg-[#7E22CE] hover:bg-purple-800 text-white'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+          >
+            Записаться
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -697,23 +753,27 @@ const Confirmation: React.FC<{ booking: Booking; onNew: () => void; onClose?: ()
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="w-full max-w-sm bg-white rounded overflow-hidden shadow-xl">
         <div className="bg-purple-800 text-white py-4 px-4 text-center">
-          <h2 className="text-lg font-bold">Запись создана</h2>
+          <h2 className="text-lg font-bold">Запись подтверждена</h2>
         </div>
-        <div className="p-4 text-center">
-          <p className="text-gray-700 mb-4">
-            Запись успешно создана! Управлять своими записями...
-          </p>
-          <p className="text-sm text-gray-600 mb-1">{formatDateTime(booking.date, booking.time)}</p>
-          <p className="text-sm text-gray-600 mb-1">{booking.serviceName}</p>
-          <p className="font-bold text-gray-900 mb-4">{booking.totalPrice} ₽</p>
-          <div className="flex justify-center">
-            <button
-              onClick={onNew}
-              className="px-6 py-2 rounded bg-orange-500 text-white font-bold text-sm transition hover:opacity-90"
-            >
-              Закрыть
-            </button>
+        <p className="text-sm text-gray-600 text-center py-2 px-4">
+          Ждём вас в автосервисе в назначенное время!
+        </p>
+        <div className="mx-4 mb-4 rounded border border-gray-200 bg-gray-50 px-4 py-3 text-center">
+          <p className="font-semibold text-gray-800">{formatDateTime(booking.date, booking.time)}</p>
+          <div className="mt-1 space-y-0.5">
+            {booking.serviceName.split('; ').filter(Boolean).map((s, i) => (
+              <p key={i} className="text-sm text-gray-600">{s}</p>
+            ))}
           </div>
+          <p className="text-lg font-bold text-gray-900 mt-2">{booking.totalPrice} ₽</p>
+        </div>
+        <div className="flex justify-center pb-4">
+          <button
+            onClick={onNew}
+            className="px-6 py-2 rounded bg-orange-500 text-white font-bold text-sm transition hover:opacity-90"
+          >
+            Понятно
+          </button>
         </div>
       </div>
     </div>
@@ -2144,6 +2204,48 @@ const App: React.FC = () => {
   const [currentBooking, setCurrentBooking] = useState<Booking | null>(null);
   const [isTimeSelectionOpen, setIsTimeSelectionOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const calendarSectionRef = useRef<HTMLDivElement | null>(null);
+  const bookingFormRef = useRef<HTMLDivElement | null>(null);
+  const [isBookingSectionVisible, setIsBookingSectionVisible] = useState(false);
+
+  // Плашка «Выбрать время» жёстко скрывается, как только верхняя граница
+  // секции календаря или формы записи достигает нижней границы экрана
+  useEffect(() => {
+    const els = [calendarSectionRef.current, bookingFormRef.current].filter(Boolean) as HTMLElement[];
+    if (els.length === 0) {
+      setIsBookingSectionVisible(false);
+      return;
+    }
+    const visibility = new Map<Element, boolean>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) visibility.set(entry.target, entry.isIntersecting);
+        setIsBookingSectionVisible(Array.from(visibility.values()).some(Boolean));
+      },
+      { threshold: 0 }
+    );
+    els.forEach(el => {
+      visibility.set(el, false);
+      observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [isTimeSelectionOpen, selectedServices.length, selectedDate, selectedTime]);
+
+  // Форма контактов плавно раскрывается после выбора слота и плавно сворачивается при сбросе времени
+  const wantBookingForm = !!(selectedServices.length > 0 && selectedDate && selectedTime);
+  const [isFormMounted, setIsFormMounted] = useState(false);
+  const [isFormExpanded, setIsFormExpanded] = useState(false);
+
+  useEffect(() => {
+    if (wantBookingForm) {
+      setIsFormMounted(true);
+      const raf = requestAnimationFrame(() => setIsFormExpanded(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setIsFormExpanded(false);
+    const t = setTimeout(() => setIsFormMounted(false), 320);
+    return () => clearTimeout(t);
+  }, [wantBookingForm]);
 
   // Journal state
   const [filterBrand, setFilterBrand] = useState<BrandType | 'all'>('all');
@@ -2221,9 +2323,11 @@ const App: React.FC = () => {
   );
 
   const handleServiceToggle = (id: string) => {
-    setSelectedServices(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
+    const next = selectedServices.includes(id)
+      ? selectedServices.filter(s => s !== id)
+      : [...selectedServices, id];
+    setSelectedServices(next);
+    if (next.length === 0) setIsTimeSelectionOpen(false);
   };
 
   const handleContactChange = (field: keyof Booking, value: string) => {
@@ -2238,8 +2342,6 @@ const App: React.FC = () => {
       missingField = 'Имя (минимум 2 символа)';
     } else if (phoneDigits.length < 10) {
       missingField = 'Корректный номер телефона';
-    } else if (!contactForm.comment || !contactForm.comment.trim()) {
-      missingField = 'Комментарий';
     }
     if (missingField) {
       setValidationError(missingField);
@@ -2387,7 +2489,18 @@ const App: React.FC = () => {
 
   const handleOpenTimeSelection = () => {
     setIsTimeSelectionOpen(true);
+    setTimeout(() => {
+      calendarSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   };
+
+  useEffect(() => {
+    if (!selectedTime) return;
+    const t = setTimeout(() => {
+      bookingFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [selectedTime]);
 
   const handleDateChangeClient = (d: string) => {
     setSelectedDate(d);
@@ -2395,7 +2508,7 @@ const App: React.FC = () => {
     setValidationError(null);
   };
 
-  const handleTimeChangeClient = (t: string) => {
+  const handleTimeChangeClient = (t: string | null) => {
     setSelectedTime(t);
     setValidationError(null);
   };
@@ -2421,7 +2534,7 @@ const App: React.FC = () => {
     return [...userBookings].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
   }, [bookings]);
 
-  const canBook = selectedDate && selectedTime && selectedServices.length > 0 && contactForm.name && contactForm.phone && contactForm.comment;
+  const canBook = selectedDate && selectedTime && selectedServices.length > 0 && contactForm.name && contactForm.phone;
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans">
@@ -2479,51 +2592,48 @@ const App: React.FC = () => {
                 <NearestBooking booking={nearestUserBooking} onCancel={handleCancelNearest} />
               )}
 
-              {selectedServices.length === 0 ? (
-                <StepServices
-                  brand={activeBrand}
-                  selected={selectedServices}
-                  onToggle={handleServiceToggle}
-                  onOpenTimeSelection={() => { }}
-                  isTimeSelectionOpen={false}
-                  services={services}
-                />
-              ) : (
-                <>
-                  <StepServices
-                    brand={activeBrand}
-                    selected={selectedServices}
-                    onToggle={handleServiceToggle}
-                    onOpenTimeSelection={handleOpenTimeSelection}
-                    isTimeSelectionOpen={isTimeSelectionOpen}
+              <StepServices
+                brand={activeBrand}
+                selected={selectedServices}
+                onToggle={handleServiceToggle}
+                onOpenTimeSelection={handleOpenTimeSelection}
+                services={services}
+                isBookingSectionVisible={isBookingSectionVisible}
+              />
+
+              {selectedServices.length > 0 && isTimeSelectionOpen && (
+                <div ref={calendarSectionRef} className="scroll-mt-24">
+                  <StepDateTime
+                    selectedDate={selectedDate}
+                    selectedTime={selectedTime}
+                    onDateChange={handleDateChangeClient}
+                    onTimeChange={handleTimeChangeClient}
+                    blockedMap={blockedMap}
+                    bookings={bookings}
                     services={services}
+                    workingHours={workingHours}
+                    daysOff={scheduleSettings.daysOff}
                   />
-                  {isTimeSelectionOpen && (
-                    <StepDateTime
-                      selectedDate={selectedDate}
-                      selectedTime={selectedTime}
-                      onDateChange={handleDateChangeClient}
-                      onTimeChange={handleTimeChangeClient}
-                      blockedMap={blockedMap}
-                      bookings={bookings}
-                      services={services}
-                      workingHours={workingHours}
-                      daysOff={scheduleSettings.daysOff}
-                    />
-                  )}
-                </>
+                </div>
               )}
 
-              {selectedServices.length > 0 && selectedDate && selectedTime && (
-                <StepContact
-                  formData={contactForm}
-                  onChange={handleContactChange}
-                  selectedDate={selectedDate}
-                  selectedTime={selectedTime}
-                  onBook={handleBook}
-                  canBook={!!canBook}
-                  validationError={validationError}
-                />
+              {isFormMounted && (
+                <div
+                  className={`transition-all duration-300 overflow-hidden ${
+                    isFormExpanded ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <StepContact
+                    formData={contactForm}
+                    onChange={handleContactChange}
+                    selectedDate={selectedDate}
+                    selectedTime={selectedTime}
+                    onBook={handleBook}
+                    canBook={!!canBook}
+                    validationError={validationError}
+                    innerRef={bookingFormRef}
+                  />
+                </div>
               )}
             </div>
           )}
