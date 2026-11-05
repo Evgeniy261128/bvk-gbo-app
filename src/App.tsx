@@ -223,8 +223,8 @@ const Header: React.FC<{
               <button
                 onClick={() => onBrandChange('bvk')}
                 className={`px-3 py-1 transition-all ${activeBrand === 'bvk'
-                    ? 'bg-green-600 text-white'
-                    : 'text-gray-700 hover:bg-gray-200'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 BVK-AUTOSERVIS
@@ -232,8 +232,8 @@ const Header: React.FC<{
               <button
                 onClick={() => onBrandChange('gbo')}
                 className={`px-3 py-1 transition-all ${activeBrand === 'gbo'
-                    ? 'bg-red-600 text-white'
-                    : 'text-gray-700 hover:bg-gray-200'
+                  ? 'bg-red-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 МирГбоСПб
@@ -256,8 +256,8 @@ const Header: React.FC<{
             <button
               onClick={() => onModeChange('client')}
               className={`flex items-center justify-center gap-1.5 py-2.5 rounded border text-sm font-medium transition ${mode === 'client'
-                  ? 'bg-purple-700 text-white border-purple-700'
-                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                ? 'bg-purple-700 text-white border-purple-700'
+                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
                 }`}
             >
               📱 Запись клиента
@@ -265,8 +265,8 @@ const Header: React.FC<{
             <button
               onClick={() => onModeChange('journal')}
               className={`flex items-center justify-center gap-1.5 py-2.5 rounded border text-sm font-medium transition relative ${mode === 'journal'
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
                 }`}
             >
               📅 Журнал мастера
@@ -386,8 +386,8 @@ const StepServices: React.FC<{
                 <div className="ml-3 flex-shrink-0">
                   <div
                     className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${checked
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-300 text-gray-500'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-300 text-gray-500'
                       }`}
                   >
                     {checked && (
@@ -433,13 +433,12 @@ const StepServices: React.FC<{
       {/* Единая плавающая плашка итогов — только в области каталога услуг */}
       {selected.length > 0 && (
         <div
-          className={`fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 backdrop-blur border-t border-gray-200 py-3 px-4 shadow-lg flex flex-col items-center gap-1.5 transition-all duration-300 ${
-            isBookingSectionVisible
-              ? 'hidden'
-              : plateEntering
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-full opacity-0 pointer-events-none'
-          }`}
+          className={`fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 backdrop-blur border-t border-gray-200 py-3 px-4 shadow-lg flex flex-col items-center gap-1.5 transition-all duration-300 ${isBookingSectionVisible
+            ? 'hidden'
+            : plateEntering
+              ? 'translate-y-0 opacity-100'
+              : 'translate-y-full opacity-0 pointer-events-none'
+            }`}
         >
           <p className="text-center text-sm text-gray-700">
             Выбрано услуг: {selected.length} ({formatDuration(totalDuration)}, {totalPrice} руб.)
@@ -735,8 +734,8 @@ const StepContact: React.FC<{
             onClick={onBook}
             disabled={!canBook}
             className={`px-8 py-2.5 rounded font-medium text-sm transition ${canBook
-                ? 'bg-[#7E22CE] hover:bg-purple-800 text-white'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-[#7E22CE] hover:bg-purple-800 text-white'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
           >
             Записаться
@@ -815,8 +814,8 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={() => setActiveTab('android')}
             className={`flex-1 py-2.5 text-center border-b-2 transition ${activeTab === 'android'
-                ? 'border-purple-600 text-purple-700 font-bold bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-purple-600 text-purple-700 font-bold bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             Android / Chrome
@@ -824,8 +823,8 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={() => setActiveTab('samsung')}
             className={`flex-1 py-2.5 text-center border-b-2 transition ${activeTab === 'samsung'
-                ? 'border-purple-600 text-purple-700 font-bold bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-purple-600 text-purple-700 font-bold bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             Samsung
@@ -833,8 +832,8 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={() => setActiveTab('ios')}
             className={`flex-1 py-2.5 text-center border-b-2 transition ${activeTab === 'ios'
-                ? 'border-purple-600 text-purple-700 font-bold bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-purple-600 text-purple-700 font-bold bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             iPhone (Safari)
@@ -1718,34 +1717,42 @@ const JournalMode: React.FC<{
 
     const today = useMemo(() => new Date(), []);
     const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
     const monthNamesFull = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
-    const weekRange = useMemo(() => {
-      const date = new Date(selectedJournalDate || today);
-      const day = date.getDay();
-      const monday = new Date(date);
-      const diffToMonday = day === 0 ? -6 : 1 - day;
-      monday.setDate(date.getDate() + diffToMonday);
+    // Непрерывный таймлайн: 60 дней назад и ~2 года вперёд от today.
+    // Генерируется ОДИН РАЗ и никогда не пересчитывается при смене выбранной даты.
+    const JOURNAL_DAYS_BACK = 60;
+    const JOURNAL_DAYS_FORWARD = 730;
+    const COLUMN_WIDTH = 48; // ширина одной дневной колонки, px
+    const TIME_COLUMN_WIDTH = 56; // 3.5rem — ширина колонки часов
+
+    const timelineDays = useMemo(() => {
+      const anchor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const days = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
+      for (let offset = -JOURNAL_DAYS_BACK; offset <= JOURNAL_DAYS_FORWARD; offset++) {
+        const d = new Date(anchor);
+        d.setDate(anchor.getDate() + offset);
         days.push(d);
       }
       return days;
-    }, [selectedJournalDate, today]);
+      // selectedDate намеренно не входит в зависимости — иначе лента будет скакать
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const weekDays = useMemo(() => {
-      return weekRange.map(d => ({
+      return timelineDays.map((d, i) => ({
         date: toLocalDateString(d),
-        dayName: dayNames[d.getDay()],
+        dayName: dayNames[d.getDay()].toUpperCase(),
         dayNum: d.getDate(),
         month: months[d.getMonth()],
+        monthKey: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        // Показываем месяц при первом дне и на первом дне нового месяца
+        showMonth: i === 0 || d.getMonth() !== timelineDays[i - 1].getMonth(),
         isToday: toLocalDateString(d) === toLocalDateString(today),
         isWeekend: scheduleSettings.daysOff.includes(d.getDay()),
       }));
-    }, [weekRange, today, scheduleSettings.daysOff]);
+    }, [timelineDays, today, scheduleSettings.daysOff]);
 
     const filteredBookings = useMemo(() => {
       if (filterBrand === 'all') return bookings;
@@ -1766,17 +1773,66 @@ const JournalMode: React.FC<{
       return min === 0 ? 1 : Math.ceil(min / 60);
     };
 
-    const goToWeek = (direction: number) => {
-      const current = new Date(weekRange[0]);
-      current.setDate(current.getDate() + direction * 7);
-      onJournalDateChange(toLocalDateString(current));
+    // Контейнер сетки: только свободный ручной скролл
+    const gridContainerRef = useRef<HTMLDivElement>(null);
+
+    // Строго однократное центрирование сегодняшнего дня при входе в журнал
+    const todayColumnRef = useRef<HTMLDivElement>(null);
+
+    const scrollToToday = (behavior: ScrollBehavior = 'smooth') => {
+      todayColumnRef.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior });
     };
 
     const handleToday = () => {
       onJournalDateChange(toLocalDateString(new Date()));
+      scrollToToday('smooth');
     };
 
-    const topBarMonthDate = parseLocalDate(selectedJournalDate || toLocalDateString(today));
+    // Надёжный стартовый скролл: ждём, пока браузер отрисует ширину контейнера
+    useEffect(() => {
+      const scrollToTodayOnce = () => {
+        if (todayColumnRef.current) {
+          todayColumnRef.current.scrollIntoView({
+            inline: 'center',
+            block: 'nearest',
+            behavior: 'auto' // при первом открытии мгновенно
+          });
+        }
+      };
+
+      // Двойной вызов с таймером гарантирует, что браузер уже отрисовал ширину контейнера
+      const raf = requestAnimationFrame(() => {
+        setTimeout(scrollToTodayOnce, 100);
+      });
+      return () => cancelAnimationFrame(raf);
+    }, []); // Пустой массив зависимостей — только один раз при монтировании
+
+    // Синхронизация месяца в тулбаре с центральной видимой колонкой при скролле
+    const [toolbarMonthKey, setToolbarMonthKey] = useState('');
+
+    // Стрелки < > в тулбаре: листание ровно на одну неделю (7 дней)
+    const scrollByWeek = (direction: number) => {
+      gridContainerRef.current?.scrollBy({
+        left: direction * 7 * COLUMN_WIDTH,
+        behavior: 'smooth',
+      });
+    };
+
+    const handleGridScroll = () => {
+      const container = gridContainerRef.current;
+      if (!container) return;
+      // Центральная видимая колонка: вычитаем ширину колонки часов
+      const centerPx = container.scrollLeft + container.clientWidth / 2 - TIME_COLUMN_WIDTH;
+      let idx = Math.floor(centerPx / COLUMN_WIDTH);
+      if (idx < 0) idx = 0;
+      if (idx > weekDays.length - 1) idx = weekDays.length - 1;
+      const key = weekDays[idx]?.monthKey || '';
+      setToolbarMonthKey(prev => (prev === key ? prev : key));
+    };
+
+    const topBarMonthDate = parseLocalDate(
+      toolbarMonthKey ? `${toolbarMonthKey}-01` : (selectedJournalDate || toLocalDateString(today))
+    );
     const currentMonthName = monthNamesFull[topBarMonthDate.getMonth()];
     const currentYear = topBarMonthDate.getFullYear();
 
@@ -1898,9 +1954,9 @@ const JournalMode: React.FC<{
               ☰
             </button>
             <div className="flex items-center gap-3">
-              <button onClick={() => goToWeek(-1)} className="text-lg font-bold px-2 hover:opacity-80" aria-label="Предыдущая неделя">&lt;</button>
+              <button onClick={() => scrollByWeek(-1)} className="text-lg font-bold px-2 hover:opacity-80" aria-label="Неделя назад">&lt;</button>
               <span className="font-medium text-lg capitalize">{currentMonthName} {currentYear}</span>
-              <button onClick={() => goToWeek(1)} className="text-lg font-bold px-2 hover:opacity-80" aria-label="Следующая неделя">&gt;</button>
+              <button onClick={() => scrollByWeek(1)} className="text-lg font-bold px-2 hover:opacity-80" aria-label="Неделя вперёд">&gt;</button>
             </div>
           </div>
           <button
@@ -1928,47 +1984,79 @@ const JournalMode: React.FC<{
               </div>
             </div>
 
-            <div className="max-w-md mx-auto px-2 sm:px-4 mb-3">
-              <button onClick={() => onAddManual()} className="w-full py-2 rounded bg-gray-900 text-white font-medium text-xs">
-                + Добавить запись (по звонку)
-              </button>
-            </div>
-
-            <div className="w-full px-1 sm:px-4">
-              <div className="bg-white rounded border border-gray-300 overflow-hidden">
+            <div
+              ref={gridContainerRef}
+              onScroll={handleGridScroll}
+              className="mx-1 sm:mx-4 overflow-x-auto overflow-y-auto h-[calc(100dvh-210px)] max-h-[calc(100dvh-210px)] relative"
+            >
+              <div className="bg-white rounded border border-gray-300 w-max">
                 <div
-                  className="grid w-full"
+                  className="grid w-max gap-0"
                   style={{
-                    gridTemplateColumns: '40px repeat(7, minmax(0, 1fr))',
-                    gridAutoRows: '60px',
+                    gridTemplateColumns: `3.5rem repeat(${weekDays.length}, 48px)`,
+                    gridAutoRows: '3.5rem',
                   }}
                 >
-                  <div className="bg-gray-100 border-r border-b border-gray-300" style={{ gridColumn: 1, gridRow: 1 }}></div>
+                  {/* Левый верхний угол над шкалой времени — sticky по обеим осям */}
+                  <div
+                    className="sticky left-0 top-0 z-40 bg-white w-14 min-w-[3.5rem] border-r border-b border-gray-300"
+                    style={{ gridColumn: 1, gridRow: 1 }}
+                  ></div>
 
+                  {/* Шапка с днями — sticky сверху; плашка месяца / число / день недели */}
                   {weekDays.map((d, dayIdx) => (
                     <div
                       key={`header-${d.date}`}
+                      data-date={d.date}
+                      data-month={d.showMonth ? d.monthKey : undefined}
+                      data-active={d.date === selectedJournalDate ? 'true' : undefined}
+                      ref={d.isToday ? todayColumnRef : undefined}
+                      tabIndex={-1}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onJournalDateChange(d.date)}
-                      className={`border-r border-b border-gray-300 flex flex-col items-center justify-center py-1 cursor-pointer transition ${d.date === selectedJournalDate ? 'bg-purple-100' : d.isWeekend ? 'bg-gray-50' : 'bg-white'}`}
+                      className={`sticky top-0 z-30 w-12 min-w-[48px] border-r border-b border-gray-300 shadow-sm flex flex-col items-center justify-center cursor-pointer transition ${d.date === selectedJournalDate ? 'bg-purple-100' : d.isWeekend ? 'bg-slate-50' : 'bg-white'
+                        }`}
                       style={{ gridColumn: dayIdx + 2, gridRow: 1 }}
                     >
-                      <span className={`text-[10px] sm:text-xs font-medium leading-none ${d.date === selectedJournalDate ? 'text-purple-700' : ''}`}>{d.dayName}</span>
-                      <span className={`text-[10px] sm:text-xs mt-1 leading-none ${d.date === selectedJournalDate ? 'text-purple-700 font-bold' : 'text-gray-600'}`}>{d.dayNum}</span>
+                      <span className="text-[9px] font-medium uppercase leading-none text-gray-400">{d.month}</span>
+                      <span
+                        className={`text-sm font-bold leading-none mt-0.5 ${d.isToday
+                          ? 'bg-purple-600 text-white rounded-full min-w-[1.375rem] h-[1.375rem] flex items-center justify-center px-1'
+                          : d.date === selectedJournalDate
+                            ? 'text-purple-700'
+                            : 'text-gray-800'
+                          }`}
+                      >
+                        {d.dayNum}
+                      </span>
+                      <span
+                        className={`text-[9px] font-medium leading-none mt-0.5 ${d.isToday ? 'text-purple-600' : 'text-gray-500'
+                          }`}
+                      >
+                        {d.dayName}
+                      </span>
                     </div>
                   ))}
 
                   {workingHours.map((hour, hourIdx) => (
                     <React.Fragment key={`row-${hour}`}>
+                      {/* Колонка времени — sticky слева, всегда прижата к левому краю */}
                       <div
-                        className="border-r border-b border-gray-300 bg-gray-50 flex items-start justify-center pt-1"
+                        className="sticky left-0 z-20 w-14 min-w-[3.5rem] h-14 bg-white border-r border-b border-gray-300 select-none text-xs text-gray-500 font-medium text-center flex items-start justify-center pt-1"
                         style={{ gridColumn: 1, gridRow: hourIdx + 2 }}
                       >
-                        <span className="text-[9px] sm:text-[10px] text-gray-500 leading-none">{hour}</span>
+                        <span className="leading-none">{hour}</span>
                       </div>
                       {weekDays.map((d, dayIdx) => (
                         <div
                           key={`cell-${d.date}-${hour}`}
-                          className={`border-r border-b border-gray-100 cursor-pointer ${d.isWeekend ? 'bg-gray-50' : 'bg-white'}`}
+                          data-active={d.date === selectedJournalDate ? 'true' : undefined}
+                          className={`w-12 min-w-[48px] h-14 border-r border-b border-gray-200 cursor-pointer transition-colors ${d.date === selectedJournalDate
+                            ? 'bg-purple-50'
+                            : d.isWeekend
+                              ? 'bg-slate-50'
+                              : 'bg-white hover:bg-gray-100'
+                            }`}
                           style={{ gridColumn: dayIdx + 2, gridRow: hourIdx + 2 }}
                           onClick={() => onCellAction(d.date, hour)}
                         ></div>
@@ -2460,6 +2548,13 @@ const App: React.FC = () => {
   };
 
   const handleCellAction = (date: string, time: string) => {
+    // На прошедшее время запись создавать нельзя
+    const [hourStr, minuteStr] = time.split(':');
+    const slot = parseLocalDate(date);
+    slot.setHours(parseInt(hourStr, 10) || 0, parseInt(minuteStr, 10) || 0, 0, 0);
+    if (slot.getTime() < Date.now()) {
+      return; // слот в прошлом — не открываем меню создания записи
+    }
     setActionSheetData({ date, time });
   };
 
@@ -2619,9 +2714,8 @@ const App: React.FC = () => {
 
               {isFormMounted && (
                 <div
-                  className={`transition-all duration-300 overflow-hidden ${
-                    isFormExpanded ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
-                  }`}
+                  className={`transition-all duration-300 overflow-hidden ${isFormExpanded ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+                    }`}
                 >
                   <StepContact
                     formData={contactForm}
@@ -2684,3 +2778,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
