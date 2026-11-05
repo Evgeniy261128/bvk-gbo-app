@@ -779,18 +779,98 @@ const Confirmation: React.FC<{ booking: Booking; onNew: () => void; onClose?: ()
   );
 };
 // ===== PWA Install Guide Modal =====
-const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'android' | 'samsung' | 'ios'>(() => {
+const InstallGuideModal: React.FC<{
+  onClose: () => void;
+  deferredPrompt: any;
+  onDirectInstall: () => void;
+}> = ({ onClose, deferredPrompt, onDirectInstall }) => {
+  const [activeTab, setActiveTab] = useState<'android' | 'ios'>(() => {
     if (typeof navigator === 'undefined') return 'android';
     const ua = navigator.userAgent || '';
     if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
       return 'ios';
     }
-    if (/SamsungBrowser/i.test(ua)) {
-      return 'samsung';
-    }
     return 'android';
   });
+  const [copied, setCopied] = useState(false);
+
+  // Detect current browser on Android to highlight the relevant card.
+  const browser = useMemo<'samsung' | 'yandex' | 'opera' | 'firefox' | 'chrome'>(() => {
+    if (typeof navigator === 'undefined') return 'chrome';
+    const ua = navigator.userAgent || '';
+    if (/SamsungBrowser/i.test(ua)) return 'samsung';
+    if (/YaBrowser/i.test(ua)) return 'yandex';
+    if (/OPR\/|Opera/i.test(ua)) return 'opera';
+    if (/Firefox|FxiOS/i.test(ua)) return 'firefox';
+    return 'chrome';
+  }, []);
+
+  const handleCopyLink = async () => {
+    const url = window.location.origin + window.location.pathname + '?install=qr';
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+  };
+
+  // Android browser cards, ready browser highlighted first.
+  const androidCards = [
+    {
+      key: 'samsung' as const,
+      title: 'Samsung Internet',
+      icon: '🌐',
+      text: (
+        <>
+          В полном браузере нажмите меню <strong>≡ (три полоски в правом нижнем углу)</strong> →{' '}
+          <strong>«Добавить страницу в»</strong> → <strong>«Главный экран»</strong> (или значок{' '}
+          <strong>«+»</strong> в адресной строке).
+        </>
+      ),
+    },
+    {
+      key: 'yandex' as const,
+      title: 'Яндекс Браузер',
+      icon: '🟡',
+      text: (
+        <>
+          Нажмите меню <strong>⋮ (три точки внизу справа)</strong> → выберите{' '}
+          <strong>«Добавить ярлык на телефон»</strong> или <strong>«Установить приложение»</strong>.
+        </>
+      ),
+    },
+    {
+      key: 'firefox' as const,
+      title: 'Mozilla Firefox',
+      icon: '🦊',
+      text: (
+        <>
+          Нажмите меню <strong>⋮ (три точки)</strong> → выберите пункт <strong>«Установить»</strong> (или
+          «Добавить на домашний экран»).
+        </>
+      ),
+    },
+    {
+      key: 'chrome' as const,
+      title: 'Google Chrome / Opera / Edge / Mi / Huawei Browser',
+      icon: '🧭',
+      text: (
+        <>
+          Нажмите кнопку <strong>«Установить приложение»</strong> на странице ИЛИ нажмите меню{' '}
+          <strong>⋮</strong> в углу браузера → <strong>«Установить приложение»</strong> (или «Добавить на
+          главный экран»).
+        </>
+      ),
+    },
+  ].sort((a, b) => (a.key === browser ? -1 : b.key === browser ? 1 : 0));
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -809,7 +889,7 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </button>
         </div>
 
-        {/* Browser Selector Tabs */}
+        {/* OS Selector Tabs */}
         <div className="flex border-b border-gray-200 bg-gray-50 text-xs font-medium">
           <button
             onClick={() => setActiveTab('android')}
@@ -818,16 +898,7 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
-            Android / Chrome
-          </button>
-          <button
-            onClick={() => setActiveTab('samsung')}
-            className={`flex-1 py-2.5 text-center border-b-2 transition ${activeTab === 'samsung'
-              ? 'border-purple-600 text-purple-700 font-bold bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-          >
-            Samsung
+            📱 Android (Все браузеры)
           </button>
           <button
             onClick={() => setActiveTab('ios')}
@@ -836,105 +907,123 @@ const InstallGuideModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
-            iPhone (Safari)
+            🍏 iPhone / iPad (iOS)
           </button>
         </div>
 
         <div className="p-4 text-sm text-gray-700 overflow-y-auto space-y-3">
           {activeTab === 'android' && (
-            <div className="space-y-2.5">
-              <p className="text-gray-600 text-xs">
-                Инструкция для <strong>Google Chrome</strong>, <strong>Яндекс Браузера</strong> и других на Android:
-              </p>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  1
-                </span>
-                <span className="text-xs">
-                  Нажмите на значок <strong>меню (три точки ⋮)</strong> в правом верхнем углу браузера.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  2
-                </span>
-                <span className="text-xs">
-                  Выберите пункт <strong>«Установить приложение»</strong> или <strong>«Добавить на главный экран»</strong>.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  3
-                </span>
-                <span className="text-xs">
-                  Подтвердите добавление. Иконка появится на рабочем столе телефона!
-                </span>
-              </div>
-            </div>
-          )}
+            <>
+              {/* BLOCK A: direct install available */}
+              {deferredPrompt && (
+                <div className="rounded-lg border-2 border-green-400 bg-green-50 p-3 space-y-2">
+                  <button
+                    onClick={onDirectInstall}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded font-bold text-base shadow transition"
+                  >
+                    📲 Установить приложение в 1 клик
+                  </button>
+                  <p className="text-xs text-green-800 text-center">
+                    Нажмите кнопку выше и подтвердите установку в появившемся системном окне.
+                  </p>
+                </div>
+              )}
 
-          {activeTab === 'samsung' && (
-            <div className="space-y-2.5">
-              <p className="text-gray-600 text-xs">
-                Инструкция для <strong>Samsung Internet</strong>:
-              </p>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  1
-                </span>
-                <span className="text-xs">
-                  Нажмите на меню <strong>(три полоски ☰ или три точки)</strong> в правом нижнем углу экрана (или на значок «+» / стрелку загрузки рядом с адресной строкой).
-                </span>
+              {/* BLOCK B: opened inside a messenger / custom tab */}
+              {!deferredPrompt && (
+                <div className="rounded-lg border-2 border-orange-400 bg-orange-50 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-bold text-orange-900 text-sm">
+                      ⚠️ Шаг 1. Перейдите из мессенджера в браузер
+                    </p>
+                    <span className="text-2xl leading-none text-orange-600">↗</span>
+                  </div>
+                  <p className="text-xs text-orange-900 whitespace-pre-line">
+                    Если вы открыли ссылку из Telegram, WhatsApp или VK (вверху слева есть крестик{' '}
+                    <strong>✕</strong>):{'\n'}
+                    Нажмите на <strong>⋮ (три точки в самом правом верхнем углу экрана ↗)</strong> и выберите{' '}
+                    <strong>„Открыть в браузере“</strong> (или „Открыть в интернет-браузере“).
+                  </p>
+                  <button
+                    onClick={handleCopyLink}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2.5 px-4 rounded font-semibold text-sm shadow transition"
+                  >
+                    {copied ? '✅ Ссылка скопирована! Вставьте её в браузер' : '📋 Или скопировать ссылку для браузера'}
+                  </button>
+                </div>
+              )}
+
+              {/* BLOCK C: universal instructions for all Android browsers */}
+              <div className="space-y-2">
+                <p className="font-bold text-gray-800 text-sm">Шаг 2. Как установить в вашем браузере:</p>
+                {androidCards.map((card) => {
+                  const isActive = card.key === browser;
+                  return (
+                    <div
+                      key={card.key}
+                      className={`rounded-lg border p-2.5 transition ${isActive
+                        ? 'border-purple-500 bg-purple-50 shadow-sm'
+                        : 'border-gray-200 bg-white'
+                        }`}
+                    >
+                      <p className={`text-xs font-bold mb-1 ${isActive ? 'text-purple-800' : 'text-gray-700'}`}>
+                        {card.icon} {card.title}
+                        {isActive && <span className="ml-1 text-purple-600">← ваш браузер</span>}
+                      </p>
+                      <p className="text-xs text-gray-600">{card.text}</p>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  2
-                </span>
-                <span className="text-xs">
-                  Выберите <strong>«Добавить страницу в»</strong> ➔ <strong>«Главный экран»</strong> (или сразу «Добавить на главный экран»).
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  3
-                </span>
-                <span className="text-xs">
-                  Нажмите <strong>«Добавить»</strong>. Приложение установится и будет работать как отдельная программа!
-                </span>
-              </div>
-            </div>
+            </>
           )}
 
           {activeTab === 'ios' && (
-            <div className="space-y-2.5">
-              <p className="text-gray-600 text-xs">
-                Инструкция для <strong>Safari на iPhone / iPad</strong>:
-              </p>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  1
-                </span>
-                <span className="text-xs">
-                  В нижней панели Safari нажмите кнопку <strong>«Поделиться»</strong> (квадрат со стрелкой вверх 📤).
-                </span>
+            <>
+              <div className="rounded-lg border-2 border-orange-400 bg-orange-50 p-3 space-y-1.5">
+                <p className="font-bold text-orange-900 text-sm">Шаг 1. Откройте ссылку в Safari</p>
+                <p className="text-xs text-orange-900">
+                  Если ссылка открыта внутри Telegram или WhatsApp — нажмите значок <strong>компаса 🧭</strong>{' '}
+                  (или <strong>⋯</strong> в правом углу) и выберите <strong>«Открыть в Safari»</strong>.
+                </p>
               </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  2
-                </span>
-                <span className="text-xs">
-                  В списке действий прокрутите вниз и нажмите <strong>«На экран „Домой“»</strong> (значок ➕).
-                </span>
+
+              <div className="space-y-2">
+                <p className="font-bold text-gray-800 text-sm">Шаг 2. Как установить в Safari:</p>
+                <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                    1
+                  </span>
+                  <span className="text-xs">
+                    В нижней панели <strong>Safari</strong> нажмите кнопку <strong>«Поделиться»</strong>{' '}
+                    (квадрат со стрелкой вверх <strong>[↑]</strong>).
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                    2
+                  </span>
+                  <span className="text-xs">
+                    Прокрутите список вниз и выберите <strong>«На экран Домой»</strong> (значок <strong>➕</strong>).
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                    3
+                  </span>
+                  <span className="text-xs">
+                    Нажмите <strong>«Добавить»</strong> в правом верхнем углу.
+                  </span>
+                </div>
               </div>
-              <div className="flex items-start gap-2.5 bg-purple-50 p-2.5 rounded border border-purple-100">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                  3
-                </span>
-                <span className="text-xs">
-                  В правом верхнем углу нажмите <strong>«Добавить»</strong>.
-                </span>
-              </div>
-            </div>
+
+              <button
+                onClick={handleCopyLink}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2.5 px-4 rounded font-semibold text-sm shadow transition"
+              >
+                {copied ? '✅ Ссылка скопирована! Вставьте её в Safari' : '📋 Скопировать ссылку для Safari'}
+              </button>
+            </>
           )}
         </div>
 
@@ -2388,6 +2477,20 @@ const App: React.FC = () => {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
+  const handleDirectInstall = async () => {
+    if (!deferredPrompt) return;
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowInstallHelp(false);
+      }
+    } catch (e) {
+      // keep modal open so the manual instructions remain available
+    }
+  };
+
   const handleInstallClick = async () => {
     if (deferredPrompt) {
       try {
@@ -2654,7 +2757,11 @@ const App: React.FC = () => {
         )}
 
         {showInstallHelp && (
-          <InstallGuideModal onClose={() => setShowInstallHelp(false)} />
+          <InstallGuideModal
+            onClose={() => setShowInstallHelp(false)}
+            deferredPrompt={deferredPrompt}
+            onDirectInstall={handleDirectInstall}
+          />
         )}
 
         <main className="pb-20">
