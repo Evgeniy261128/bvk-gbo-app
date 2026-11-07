@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BRANDS, ADDRESS,
-  formatDateTime, parsePrice,
+  formatDateTime, formatDateLabel, parsePrice,
   BrandType, Service, Booking, BookingStatus, AppMode, ScheduleSettings, Client,
 } from './types';
 
@@ -196,6 +196,89 @@ function getBlockedHoursMap(bookings: Booking[], date: string, services: Service
 
 function getBookingsAtSlot(bookings: Booking[], date: string, time: string): Booking[] {
   return bookings.filter(b => b.date === date && b.time === time);
+}
+
+// ===== Time / duration helpers =====
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minutesToTime(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+// Реальная длительность записи в минутах: явное поле duration → endTime → длительность услуг.
+// Для личных событий без услуг по умолчанию 60 минут.
+function getBookingDuration(b: Booking, services: Service[]): number {
+  if (typeof b.duration === 'number' && b.duration > 0) return b.duration;
+  if (b.endTime) {
+    const diff = timeToMinutes(b.endTime) - timeToMinutes(b.time);
+    if (diff > 0) return diff;
+  }
+  const min = b.services.reduce((sum, id) => sum + (services.find(s => s.id === id)?.duration || 0), 0);
+  if (min > 0) return min;
+  return 60;
+}
+
+function getBookingEndTime(b: Booking, services: Service[]): string {
+  return minutesToTime(timeToMinutes(b.time) + getBookingDuration(b, services));
+}
+
+// Цвет карточки в сетке журнала: кастомный → зелёный для BVK → оранжевый для личных событий / ГБО.
+function getBookingColor(b: Booking): string {
+  if (b.color) return b.color;
+  if (b.type === 'personal') return '#ea580c';
+  return b.brand === 'bvk' ? '#16a34a' : '#ea580c';
+}
+
+// Раскладка пересекающихся по времени записей рядом по горизонтали (side-by-side, как Bumpix/Google Calendar).
+// Возвращает для каждой записи: { colIndex, colCount } — долю ширины колонки дня.
+function layoutDayItems(items: Booking[], services: Service[]): Map<string, { colIndex: number; colCount: number }> {
+  const result = new Map<string, { colIndex: number; colCount: number }>();
+  if (items.length === 0) return result;
+
+  const enriched = items.map(b => {
+    const start = timeToMinutes(b.time);
+    return { b, start, end: Math.max(start + 1, start + getBookingDuration(b, services)) };
+  }).sort((x, y) => (x.start - y.start) || (x.end - y.end));
+
+  let cluster: typeof enriched = [];
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    if (cluster.length === 0) return;
+    // colIndex — первая свободная дорожка; colCount — макс. число одновременных наложений в кластере
+    const columns: number[] = [];
+    let maxCol = 0;
+    for (const item of cluster) {
+      let placed = columns.findIndex(end => end <= item.start);
+      if (placed === -1) {
+        columns.push(item.end);
+        placed = columns.length - 1;
+      } else {
+        columns[placed] = item.end;
+      }
+      maxCol = Math.max(maxCol, placed + 1);
+      result.set(item.b.id, { colIndex: placed, colCount: 0 });
+    }
+    for (const item of cluster) {
+      const info = result.get(item.b.id);
+      if (info) info.colCount = maxCol;
+    }
+    cluster = [];
+  };
+
+  for (const item of enriched) {
+    if (cluster.length > 0 && item.start >= clusterEnd) flush();
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  flush();
+
+  return result;
 }
 
 // ===== Header =====
@@ -1076,6 +1159,9 @@ const ManualAddModal: React.FC<{
   const [newCarMake, setNewCarMake] = useState('');
   const [newCarModel, setNewCarModel] = useState('');
 
+  // Поиск по услугам на шаге выбора услуг
+  const [searchQuery, setSearchQuery] = useState('');
+
   useEffect(() => {
     if (isOpen) {
       setStep('client');
@@ -1085,10 +1171,16 @@ const ManualAddModal: React.FC<{
       setNewPhone('');
       setNewCarMake('');
       setNewCarModel('');
+      setSearchQuery('');
     }
   }, [isOpen]);
 
   const brandServices = useMemo(() => services.filter(s => s.brand === prefillBrand), [services, prefillBrand]);
+
+  const filteredServices = useMemo(
+    () => brandServices.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())),
+    [brandServices, searchQuery]
+  );
 
   const totalPrice = useMemo(
     () => selectedServiceIds.reduce((sum, id) => sum + parsePrice(services.find(s => s.id === id)?.price || '0'), 0),
@@ -1120,6 +1212,8 @@ const ManualAddModal: React.FC<{
       .filter(Boolean) as Service[];
     const serviceName = selectedServiceObjs.map(s => s.name).join('; ') || 'Вручную (звонок)';
     const dateStr = prefillDate || toLocalDateString(new Date());
+    const durationMin = selectedServiceObjs.reduce((sum, s) => sum + (s.duration || 0), 0) || 60;
+    const startMin = timeToMinutes(prefillTime);
     const newBooking: Booking = {
       id: Date.now().toString(),
       brand: prefillBrand,
@@ -1130,6 +1224,8 @@ const ManualAddModal: React.FC<{
       carModel: selectedClient.carModel || '',
       date: dateStr,
       time: prefillTime,
+      endTime: minutesToTime(startMin + durationMin),
+      duration: durationMin,
       name: selectedClient.name,
       phone: selectedClient.phone,
       comment: '',
@@ -1197,7 +1293,36 @@ const ManualAddModal: React.FC<{
 
         {step === 'services' && (
           <div className="flex-1 overflow-y-auto">
-            {brandServices.map(svc => {
+            {/* Прилипающий блок поиска услуг */}
+            <div className="sticky top-0 z-10 bg-white p-4 border-b border-gray-100">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Поиск услуг..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-[15px]"
+                />
+                {searchQuery !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 text-base"
+                    aria-label="Очистить поиск"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {filteredServices.map(svc => {
               const checked = selectedServiceIds.includes(svc.id);
               return (
                 <div
@@ -1219,6 +1344,10 @@ const ManualAddModal: React.FC<{
                 </div>
               );
             })}
+
+            {filteredServices.length === 0 && (
+              <div className="text-gray-500 py-8 text-center">Услуги не найдены</div>
+            )}
           </div>
         )}
 
@@ -1230,7 +1359,7 @@ const ManualAddModal: React.FC<{
           )}
           {step === 'new_client' && (
             <div className="flex gap-2">
-              <button onClick={() => setStep('client')} className="flex-1 py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
+              <button onClick={() => { setSearchQuery(''); setStep('client'); }} className="flex-1 py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
                 Назад
               </button>
               <button
@@ -1248,7 +1377,7 @@ const ManualAddModal: React.FC<{
                 Выбрано: {selectedServiceIds.length}. Сумма: {totalPrice} руб.
               </p>
               <div className="flex gap-2">
-                <button onClick={() => setStep('client')} className="flex-1 py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
+                <button onClick={() => { setSearchQuery(''); setStep('client'); }} className="flex-1 py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
                   Назад
                 </button>
                 <button onClick={handleSave} className="flex-1 py-2.5 rounded bg-purple-700 text-white font-medium text-sm hover:opacity-90 transition">
@@ -1263,7 +1392,7 @@ const ManualAddModal: React.FC<{
   );
 };
 
-// ===== Booking Details Modal =====
+// ===== Booking Details Modal (полноценная форма редактирования, как в Bumpix) =====
 const BookingDetailsModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -1272,126 +1401,273 @@ const BookingDetailsModal: React.FC<{
   onDelete: (id: string) => void;
   services: Service[];
 }> = ({ isOpen, onClose, booking, onUpdate, onDelete, services }) => {
-  const [localStatus, setLocalStatus] = useState<BookingStatus>(booking.status);
+  const isPersonal = booking.type === 'personal';
+
+  const [date, setDate] = useState(booking.date);
+  const [time, setTime] = useState(booking.time);
+  const [endTime, setEndTime] = useState(getBookingEndTime(booking, services));
+  const [name, setName] = useState(booking.name);
+  const [phone, setPhone] = useState(booking.phone);
+  const [carMake, setCarMake] = useState(booking.carMake);
+  const [carModel, setCarModel] = useState(booking.carModel);
+  const [serviceName, setServiceName] = useState(booking.serviceName);
+  const [priceStr, setPriceStr] = useState(String(booking.totalPrice));
+  const [status, setStatus] = useState<BookingStatus>(booking.status);
+  const [comment, setComment] = useState(booking.comment);
+  const [color, setColor] = useState(getBookingColor(booking));
 
   useEffect(() => {
-    setLocalStatus(booking.status);
-  }, [booking.id, booking.status]);
-
-  if (!isOpen) return null;
+    setDate(booking.date);
+    setTime(booking.time);
+    setEndTime(getBookingEndTime(booking, services));
+    setName(booking.name);
+    setPhone(booking.phone);
+    setCarMake(booking.carMake);
+    setCarModel(booking.carModel);
+    setServiceName(booking.serviceName);
+    setPriceStr(String(booking.totalPrice));
+    setStatus(booking.status);
+    setComment(booking.comment);
+    setColor(getBookingColor(booking));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking.id]);
 
   const WEEK_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
-  const d = parseLocalDate(booking.date);
+  if (!isOpen) return null;
+
+  const d = parseLocalDate(date);
   const dateLabel = `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()} г. (${WEEK_SHORT[d.getDay()]})`;
 
-  const totalMinutes = booking.services.reduce(
-    (sum, id) => sum + (services.find(s => s.id === id)?.duration || 0),
-    0
-  );
-  const startH = parseInt(booking.time.split(':')[0]) || 0;
-  const endTotal = startH * 60 + (parseInt(booking.time.split(':')[1]) || 0) + (booking.type === 'personal' ? 60 : totalMinutes);
-  const endLabel = `${Math.floor(endTotal / 60).toString().padStart(2, '0')}:${(endTotal % 60).toString().padStart(2, '0')}`;
+  const phoneClean = phone.replace(/\D/g, '');
 
-  const serviceList = booking.services
-    .map(id => services.find(s => s.id === id))
-    .filter(Boolean) as Service[];
+  const PALETTE = ['#16a34a', '#ea580c', '#2563eb', '#dc2626', '#7c3aed', '#0891b2'];
 
-  const phoneClean = booking.phone.replace(/\D/g, '');
+  const inputCls = "w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500";
+
+  const handleSave = () => {
+    // Конец должен быть строго позже начала: иначе нормализуем интервал (минимум 1 минута),
+    // чтобы сохранённые endTime/duration не расходились с высотой карточки на сетке.
+    const startMin = timeToMinutes(time);
+    const rawEnd = timeToMinutes(endTime);
+    const duration = Math.max(1, rawEnd - startMin);
+    const normalizedEndTime = rawEnd > startMin ? endTime : minutesToTime(startMin + 1);
+    onUpdate({
+      ...booking,
+      date,
+      time,
+      endTime: normalizedEndTime,
+      duration,
+      name: isPersonal ? booking.name : name,
+      phone: isPersonal ? '' : phone,
+      carMake: isPersonal ? '' : carMake,
+      carModel: isPersonal ? '' : carModel,
+      serviceName,
+      totalPrice: isPersonal ? 0 : (parseInt(priceStr, 10) || 0),
+      status,
+      comment,
+      color,
+    });
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col">
-      {/* Top Bar */}
+      {/* Шапка: назад — заголовок — корзина */}
       <div className="bg-purple-800 text-white py-3 px-4 flex justify-between items-center">
-        <h3 className="font-medium">Запись клиента</h3>
-        <button onClick={onClose} className="text-white/80 hover:text-white text-lg leading-none" aria-label="Закрыть">
-          ✕
+        <button onClick={onClose} className="text-xl leading-none w-8 text-left" aria-label="Назад">
+          ←
         </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto pb-20">
-        {/* Блок 1: Дата и время */}
-        <div className="bg-white p-4 border-b border-gray-200">
-          <p className="text-gray-900 font-medium">{dateLabel}</p>
-          <p className="text-gray-500 text-sm mt-0.5">с {booking.time} до {endLabel}</p>
-        </div>
-
-        {/* Блок 2: Клиент и контакты */}
-        <div className="bg-white p-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="min-w-0">
-            <p className="text-gray-900 text-lg font-medium truncate">{booking.name || 'Без имени'}</p>
-            <p className="text-gray-500 text-sm mt-0.5">{booking.phone}</p>
-          </div>
-          {booking.phone && (
-            <div className="flex gap-2 ml-3 flex-shrink-0">
-              <a
-                href={`tel:${phoneClean}`}
-                className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition"
-                aria-label="Позвонить"
-              >
-                📞
-              </a>
-              <a
-                href={`https://wa.me/${phoneClean}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition"
-                aria-label="WhatsApp"
-              >
-                💬
-              </a>
-            </div>
-          )}
-        </div>
-
-        {/* Блок 3: Услуги */}
-        <div className="bg-white p-4 border-b border-gray-200">
-          <p className="text-xs text-gray-500 mb-1">Услуги</p>
-          {serviceList.length > 0 ? (
-            <ul className="text-gray-900 text-sm space-y-1">
-              {serviceList.map(s => (
-                <li key={s.id}>{s.name}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-900 text-sm">{booking.serviceName || '—'}</p>
-          )}
-        </div>
-
-        {/* Блок 4: Доход и статус */}
-        <div className="bg-white p-4 border-b border-gray-200 flex items-center justify-between">
-          <p className="text-2xl font-bold text-gray-900">{booking.totalPrice} RUB</p>
-          <select
-            value={localStatus}
-            onChange={e => setLocalStatus(e.target.value as BookingStatus)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-          >
-            <option value="pending">Ожидается</option>
-            <option value="in_progress">В работе</option>
-            <option value="ready">Готово</option>
-          </select>
-        </div>
-
-        {/* Блок 5: Комментарий */}
-        {booking.comment && (
-          <div className="bg-white p-4 border-b border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Комментарий</p>
-            <p className="text-gray-900 text-sm">{booking.comment}</p>
-          </div>
-        )}
-
-        {/* Удалить */}
+        <h3 className="font-medium">{isPersonal ? 'Событие' : 'Запись клиента'}</h3>
         <button
           onClick={() => { onDelete(booking.id); onClose(); }}
-          className="w-full text-red-600 font-medium p-4 text-center bg-white mt-4"
+          className="text-lg leading-none w-8 text-right hover:text-red-200"
+          aria-label="Удалить"
         >
-          Удалить запись
+          🗑️
         </button>
       </div>
 
-      {/* FAB */}
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* Дата и время */}
+        <div className="bg-white p-4 border-b border-gray-200">
+          <p className="text-gray-900 font-medium mb-3">{dateLabel}</p>
+          <label className="block text-xs text-gray-500 mb-1">Дата</label>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className={`${inputCls} mb-3`}
+          />
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">с</label>
+              <input
+                type="time"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <span className="text-gray-400 mt-5">—</span>
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">до</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+
+        {isPersonal ? (
+          <>
+            {/* Личное событие: название + комментарий */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Название события</label>
+              <input
+                type="text"
+                value={serviceName}
+                onChange={e => setServiceName(e.target.value)}
+                className={inputCls}
+                placeholder="Название события"
+              />
+            </div>
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Комментарий</label>
+              <textarea
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                className={`${inputCls} resize-none`}
+                rows={3}
+                placeholder="Комментарий"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Клиент и контакты */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Имя клиента</label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className={`${inputCls} mb-3`}
+                placeholder="Имя клиента"
+              />
+              <label className="block text-xs text-gray-500 mb-1">Телефон</label>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className={inputCls}
+                  placeholder="+7..."
+                />
+                {phoneClean && (
+                  <a
+                    href={`tel:${phoneClean}`}
+                    className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition flex-shrink-0"
+                    aria-label="Позвонить"
+                  >
+                    📞
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Автомобиль */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Автомобиль (марка / модель)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={carMake}
+                  onChange={e => setCarMake(e.target.value)}
+                  className={inputCls}
+                  placeholder="Марка"
+                />
+                <input
+                  type="text"
+                  value={carModel}
+                  onChange={e => setCarModel(e.target.value)}
+                  className={inputCls}
+                  placeholder="Модель"
+                />
+              </div>
+            </div>
+
+            {/* Услуги */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Услуги</label>
+              <textarea
+                value={serviceName}
+                onChange={e => setServiceName(e.target.value)}
+                className={`${inputCls} resize-none`}
+                rows={3}
+                placeholder="Список услуг"
+              />
+            </div>
+
+            {/* Доход и статус */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Доход / Сумма (₽)</label>
+              <input
+                type="number"
+                value={priceStr}
+                onChange={e => setPriceStr(e.target.value)}
+                className={`${inputCls} mb-3`}
+                placeholder="0"
+              />
+              <label className="block text-xs text-gray-500 mb-1">Статус</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as BookingStatus)}
+                className={inputCls}
+              >
+                <option value="pending">Ожидается</option>
+                <option value="in_progress">В работе</option>
+                <option value="ready">Готово</option>
+              </select>
+            </div>
+
+            {/* Комментарий */}
+            <div className="bg-white p-4 border-b border-gray-200">
+              <label className="block text-xs text-gray-500 mb-1">Комментарий</label>
+              <textarea
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                className={`${inputCls} resize-none`}
+                rows={3}
+                placeholder="Комментарий"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Цвет карточки */}
+        <div className="bg-white p-4 border-b border-gray-200">
+          <label className="block text-xs text-gray-500 mb-2">Цвет в журнале</label>
+          <div className="flex gap-3">
+            {PALETTE.map(c => (
+              <button
+                key={c}
+                onClick={() => setColor(c)}
+                className={`w-8 h-8 rounded-full transition ${color === c ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
+                style={{ backgroundColor: c }}
+                aria-label={`Цвет ${c}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Плавающая кнопка сохранения */}
       <button
-        onClick={() => { onUpdate({ ...booking, status: localStatus }); onClose(); }}
+        onClick={handleSave}
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-purple-700 text-white text-2xl shadow-lg hover:opacity-90 transition flex items-center justify-center"
         aria-label="Сохранить"
       >
@@ -1647,11 +1923,21 @@ const ClientModal: React.FC<{
 const ActionBottomSheet: React.FC<{
   isOpen: boolean;
   time: string;
+  dateLabel?: string;
+  existingBooking?: Booking | null;
   onClose: () => void;
+  onEditExisting?: () => void;
   onBookClient: () => void;
   onCreatePersonal: () => void;
-}> = ({ isOpen, time, onClose, onBookClient, onCreatePersonal }) => {
+}> = ({ isOpen, time, dateLabel = '', existingBooking, onClose, onEditExisting, onBookClient, onCreatePersonal }) => {
   if (!isOpen) return null;
+
+  const existingLabel = existingBooking
+    ? (existingBooking.type === 'personal'
+      ? (existingBooking.serviceName || existingBooking.name)
+      : (existingBooking.name || existingBooking.serviceName))
+    : '';
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose}>
       <div
@@ -1659,17 +1945,31 @@ const ActionBottomSheet: React.FC<{
         onClick={e => e.stopPropagation()}
       >
         <div className="bg-purple-800 text-white p-4 font-medium">Выберите действие</div>
+
+        {/* Редактирование уже существующей записи в этом слоте */}
+        {existingBooking && (
+          <button
+            onClick={onEditExisting}
+            className="w-full border-b border-gray-200 p-4 text-left bg-purple-50 hover:bg-purple-100"
+          >
+            <span className="block text-purple-800 font-medium truncate">✏️ Открыть / изменить: {existingLabel}</span>
+            {dateLabel && <span className="block text-xs text-gray-500 mt-0.5">{dateLabel}</span>}
+          </button>
+        )}
+
         <button
           onClick={onBookClient}
-          className="w-full border-b border-gray-200 p-4 text-left text-gray-800 hover:bg-gray-50"
+          className="w-full border-b border-gray-200 p-4 text-left hover:bg-gray-50"
         >
-          Записать клиента на {time}
+          <span className="block text-gray-800 font-medium">➕ Записать клиента на {time}</span>
+          {dateLabel && <span className="block text-xs text-gray-500 mt-0.5">{dateLabel}</span>}
         </button>
         <button
           onClick={onCreatePersonal}
-          className="w-full border-b border-gray-200 p-4 text-left text-gray-800 hover:bg-gray-50"
+          className="w-full border-b border-gray-200 p-4 text-left hover:bg-gray-50"
         >
-          Создать личное событие на {time}
+          <span className="block text-gray-800 font-medium">➕ Создать личное событие на {time}</span>
+          {dateLabel && <span className="block text-xs text-gray-500 mt-0.5">{dateLabel}</span>}
         </button>
         <button
           onClick={onClose}
@@ -1694,18 +1994,29 @@ const PersonalEventModal: React.FC<{
   const [title, setTitle] = useState('');
   const [startTime, setStartTime] = useState(prefillTime);
   const [endTime, setEndTime] = useState('');
+  const [comment, setComment] = useState('');
+  const [color, setColor] = useState('#ea580c');
+
+  const EVENT_COLORS = ['#16a34a', '#ea580c', '#2563eb', '#dc2626', '#7c3aed', '#0891b2'];
 
   useEffect(() => {
     if (isOpen) {
       setTitle('');
       setStartTime(prefillTime);
       setEndTime('');
+      setComment('');
+      setColor('#ea580c');
     }
   }, [isOpen, prefillTime]);
 
   const handleSave = () => {
     if (!title || !startTime) return;
     const dateStr = prefillDate || toLocalDateString(new Date());
+    const startMin = timeToMinutes(startTime);
+    // Если время окончания не задано — событие длится 1 час.
+    const endMin = endTime && timeToMinutes(endTime) > startMin
+      ? timeToMinutes(endTime)
+      : startMin + 60;
     const newBooking: Booking = {
       id: Date.now().toString(),
       brand: prefillBrand,
@@ -1716,9 +2027,12 @@ const PersonalEventModal: React.FC<{
       carModel: '',
       date: dateStr,
       time: startTime,
+      endTime: minutesToTime(endMin),
+      duration: endMin - startMin,
       name: 'Личное событие',
       phone: '',
-      comment: endTime ? `до ${endTime}` : '',
+      comment,
+      color,
       status: 'pending',
       createdAt: new Date().toISOString(),
       type: 'personal',
@@ -1756,6 +2070,27 @@ const PersonalEventModal: React.FC<{
             onChange={e => setEndTime(e.target.value)}
             className={inputCls}
           />
+          <label className="block text-xs text-gray-600 mb-1">Комментарий</label>
+          <textarea
+            placeholder="Комментарий..."
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            className={`${inputCls} resize-none`}
+            rows={3}
+          />
+          <label className="block text-xs text-gray-600 mb-2">Цвет в журнале</label>
+          <div className="flex gap-3">
+            {EVENT_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={`w-8 h-8 rounded-full transition ${color === c ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
+                style={{ backgroundColor: c }}
+                aria-label={`Цвет ${c}`}
+              />
+            ))}
+          </div>
         </div>
         <div className="p-3 border-t border-gray-300 flex gap-2 shrink-0">
           <button
@@ -1780,7 +2115,7 @@ const PersonalEventModal: React.FC<{
 const JournalMode: React.FC<{
   bookings: Booking[];
   onAddManual: (time?: string, brand?: BrandType) => void;
-  onCellAction: (date: string, time: string) => void;
+  onCellAction: (date: string, time: string, existingBooking?: Booking) => void;
   onDetailsOpen: (booking: Booking) => void;
   selectedJournalDate: string;
   onJournalDateChange: (d: string) => void;
@@ -1790,7 +2125,6 @@ const JournalMode: React.FC<{
   onDeleteBooking: (id: string) => void;
   services: Service[];
   onUpdateServices: (services: Service[]) => void;
-  workingHours: string[];
   scheduleSettings: ScheduleSettings;
   onUpdateSchedule: (settings: ScheduleSettings) => void;
   clients: Client[];
@@ -1799,10 +2133,32 @@ const JournalMode: React.FC<{
 }> = ({
   bookings, onAddManual, onCellAction, onDetailsOpen, selectedJournalDate, onJournalDateChange,
   filterBrand, onFilterChange, onUpdateBooking, onDeleteBooking, services, onUpdateServices,
-  workingHours, scheduleSettings, onUpdateSchedule, clients, onSaveClient, onDeleteClient,
+  scheduleSettings, onUpdateSchedule, clients, onSaveClient, onDeleteClient,
 }) => {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [activeAdminScreen, setActiveAdminScreen] = useState<'calendar' | 'clients' | 'services' | 'settings'>('calendar');
+
+    // QR-код для клиентов: модалка + состояние «ссылка скопирована»
+    const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+    const [isQrLinkCopied, setIsQrLinkCopied] = useState(false);
+
+    const handleCopyQrLink = async () => {
+      const url = 'https://evgeniy261128.github.io/bvk-gbo-app/';
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setIsQrLinkCopied(true);
+      window.setTimeout(() => setIsQrLinkCopied(false), 2000);
+    };
 
     const today = useMemo(() => new Date(), []);
     const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -1857,10 +2213,18 @@ const JournalMode: React.FC<{
       [dayBookings]
     );
 
-    const getDurationHours = (b: Booking): number => {
-      const min = b.services.reduce((sum, id) => sum + (services.find(s => s.id === id)?.duration || 0), 0);
-      return min === 0 ? 1 : Math.ceil(min / 60);
-    };
+    // Сетка часов журнала всегда в расширенном диапазоне 07:00–22:00,
+    // независимо от клиентского расписания (scheduleSettings), чтобы мастер
+    // мог записывать события утром и вечером.
+    const JOURNAL_START_HOUR = 7;
+    const JOURNAL_END_HOUR = 22;
+    const timeRows = useMemo(() => {
+      const rows: string[] = [];
+      for (let h = JOURNAL_START_HOUR; h <= JOURNAL_END_HOUR; h++) {
+        rows.push(`${h.toString().padStart(2, '0')}:00`);
+      }
+      return rows;
+    }, []);
 
     // Контейнер сетки: только свободный ручной скролл
     const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -1927,6 +2291,16 @@ const JournalMode: React.FC<{
 
     const handleNavClick = (screen: 'calendar' | 'clients' | 'services' | 'settings') => {
       setActiveAdminScreen(screen);
+      if (screen === 'settings') {
+        // При открытии настроек показываем актуальное сохранённое расписание
+        // и состояние кнопки «СОХРАНЕНО».
+        setLocalSchedule({
+          startTime: scheduleSettings.startTime,
+          endTime: scheduleSettings.endTime,
+          daysOff: [...scheduleSettings.daysOff],
+        });
+        setIsScheduleSaved(true);
+      }
       setIsDrawerOpen(false);
     };
 
@@ -1943,8 +2317,13 @@ const JournalMode: React.FC<{
       daysOff: [...scheduleSettings.daysOff],
     });
 
+    // Флаг «расписание сохранено»: при открытии экрана — true (кнопка «СОХРАНЕНО»).
+    // Сбрасывается в false при любом изменении формы времени/выходных дней.
+    const [isScheduleSaved, setIsScheduleSaved] = useState(true);
+
     const handleScheduleChange = (field: 'startTime' | 'endTime', value: string) => {
       setLocalSchedule(prev => ({ ...prev, [field]: value }));
+      setIsScheduleSaved(false);
     };
 
     const handleDayOffToggle = (day: number) => {
@@ -1954,6 +2333,7 @@ const JournalMode: React.FC<{
           ? prev.daysOff.filter(d => d !== day)
           : [...prev.daysOff, day].sort((a, b) => a - b),
       }));
+      setIsScheduleSaved(false);
     };
 
     const handleSaveSchedule = () => {
@@ -1962,6 +2342,7 @@ const JournalMode: React.FC<{
         endTime: localSchedule.endTime,
         daysOff: localSchedule.daysOff,
       });
+      setIsScheduleSaved(true);
       setIsDrawerOpen(false);
     };
 
@@ -2002,6 +2383,25 @@ const JournalMode: React.FC<{
       if (h > 0) return m > 0 ? `${h} ч. ${m} мин.` : `${h} ч.`;
       return `${m} мин.`;
     };
+
+    // Раскладка накладывающихся записей рядом по горизонтали (side-by-side).
+    const positionedBookings = useMemo(() => {
+      const visible = filteredBookings.filter(b => weekDays.some(wd => wd.date === b.date));
+      const byDate = new Map<string, Booking[]>();
+      for (const b of visible) {
+        const arr = byDate.get(b.date);
+        if (arr) arr.push(b);
+        else byDate.set(b.date, [b]);
+      }
+      const positions = new Map<string, { colIndex: number; colCount: number }>();
+      for (const arr of byDate.values()) {
+        for (const [id, pos] of layoutDayItems(arr, services)) positions.set(id, pos);
+      }
+      return visible.map(b => ({
+        b,
+        pos: positions.get(b.id) || { colIndex: 0, colCount: 1 },
+      }));
+    }, [filteredBookings, weekDays, services]);
 
     return (
       <>
@@ -2048,14 +2448,27 @@ const JournalMode: React.FC<{
               <button onClick={() => scrollByWeek(1)} className="text-lg font-bold px-2 hover:opacity-80" aria-label="Неделя вперёд">&gt;</button>
             </div>
           </div>
-          <button
-            onClick={handleToday}
-            className="text-xl leading-none hover:opacity-80"
-            aria-label="Сегодня"
-            title="Сегодня"
-          >
-            📅
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              className="w-9 h-9 bg-black hover:bg-neutral-800 active:scale-95 text-white rounded-lg flex items-center justify-center transition shadow-sm"
+              aria-label="QR-код для клиентов"
+              title="QR-код для клиентов"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm9-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm11.5-2H17v2.5h-1.5V18H13v-2.5h2.5V14h1v1.5H18V14h1v2h-1v1h-1.5v-1.5z" />
+                <path d="M18 18h1.5v1.5H18zM15 20h2v1h-2zM20.5 20H22v1h-1.5zM15.5 15.5H17V17h-1.5z" />
+              </svg>
+            </button>
+            <button
+              onClick={handleToday}
+              className="text-xl leading-none hover:opacity-80"
+              aria-label="Сегодня"
+              title="Сегодня"
+            >
+              📅
+            </button>
+          </div>
         </div>
 
         {activeAdminScreen === 'calendar' && (
@@ -2127,7 +2540,7 @@ const JournalMode: React.FC<{
                     </div>
                   ))}
 
-                  {workingHours.map((hour, hourIdx) => (
+                  {timeRows.map((hour, hourIdx) => (
                     <React.Fragment key={`row-${hour}`}>
                       {/* Колонка времени — sticky слева, всегда прижата к левому краю */}
                       <div
@@ -2136,51 +2549,105 @@ const JournalMode: React.FC<{
                       >
                         <span className="leading-none">{hour}</span>
                       </div>
-                      {weekDays.map((d, dayIdx) => (
-                        <div
-                          key={`cell-${d.date}-${hour}`}
-                          data-active={d.date === selectedJournalDate ? 'true' : undefined}
-                          className={`w-12 min-w-[48px] h-14 border-r border-b border-gray-200 cursor-pointer transition-colors ${d.date === selectedJournalDate
-                            ? 'bg-purple-50'
-                            : d.isWeekend
-                              ? 'bg-slate-50'
-                              : 'bg-white hover:bg-gray-100'
-                            }`}
-                          style={{ gridColumn: dayIdx + 2, gridRow: hourIdx + 2 }}
-                          onClick={() => onCellAction(d.date, hour)}
-                        ></div>
-                      ))}
+                      {weekDays.map((d, dayIdx) => {
+                        // Нерабочее время (до/после рабочих часов) и выходные — светло-серый фон,
+                        // но остаются кликабельными для создания записей и личных событий.
+                        const h = parseInt(hour.split(':')[0], 10);
+                        const startH = parseInt(scheduleSettings.startTime.split(':')[0], 10);
+                        const endH = parseInt(scheduleSettings.endTime.split(':')[0], 10);
+                        const nonWorking = h < startH || h >= endH;
+                        const gray = d.isWeekend || nonWorking;
+                        const isSelected = d.date === selectedJournalDate;
+                        return (
+                          <div
+                            key={`cell-${d.date}-${hour}`}
+                            data-active={isSelected ? 'true' : undefined}
+                            className={`w-12 min-w-[48px] h-14 border-r border-b border-gray-200 cursor-pointer transition-colors ${gray
+                              ? isSelected
+                                ? 'bg-gray-200/90 hover:bg-gray-300'
+                                : 'bg-gray-100/80 hover:bg-gray-200'
+                              : isSelected
+                                ? 'bg-purple-50'
+                                : 'bg-white hover:bg-gray-100'
+                              }`}
+                            style={{ gridColumn: dayIdx + 2, gridRow: hourIdx + 2 }}
+                            onClick={() => onCellAction(d.date, hour)}
+                          ></div>
+                        );
+                      })}
                     </React.Fragment>
                   ))}
 
-                  {filteredBookings
-                    .filter(b => weekDays.some(wd => wd.date === b.date))
-                    .map((b) => {
-                      const durHrs = getDurationHours(b);
-                      const endH = parseInt(b.time.split(':')[0]) + durHrs;
-                      const endTime = `${endH.toString().padStart(2, '0')}:00`;
-                      const bgClass = b.type === 'personal' ? 'bg-orange-500' : b.brand === 'bvk' ? 'bg-green-600' : 'bg-red-600';
-                      const dayIdx = weekDays.findIndex(wd => wd.date === b.date);
-                      const startHour = parseInt(workingHours[0]?.split(':')[0] || '9');
-                      const hourIdx = parseInt(b.time.split(':')[0]) - startHour;
+                  {positionedBookings.map(({ b, pos }) => {
+                    const dayIdx = weekDays.findIndex(wd => wd.date === b.date);
+                    if (dayIdx === -1) return null;
 
-                      if (dayIdx === -1) return null;
+                    const startMin = timeToMinutes(b.time);
+                    const endMin = timeToMinutes(getBookingEndTime(b, services));
+                    const startIdx = startMin / 60 - JOURNAL_START_HOUR;
+                    const endIdx = endMin / 60 - JOURNAL_START_HOUR;
+                    const clampedStart = Math.max(startIdx, 0);
+                    const rowStart = Math.max(0, Math.floor(startIdx));
+                    const rowEnd = Math.min(timeRows.length, Math.ceil(endIdx));
+                    const span = Math.max(1, rowEnd - rowStart);
+                    const topOffset = (clampedStart - rowStart) * 56;
+                    const height = Math.max(20, (Math.min(endIdx, timeRows.length) - clampedStart) * 56 - 2);
 
-                      return (
-                        <div
-                          key={b.id}
-                          onClick={() => onDetailsOpen(b)}
-                          className={`m-[1px] p-1 rounded-sm text-white overflow-hidden cursor-pointer z-10 flex flex-col leading-tight ${bgClass} ${b.status === 'ready' ? 'opacity-60' : ''}`}
-                          style={{ gridColumn: dayIdx + 2, gridRow: `${hourIdx + 2} / span ${durHrs}` }}
-                        >
-                          <span className="text-[8px] sm:text-[10px] font-bold truncate">{b.time}-{endTime}</span>
-                          <span className="text-[8px] sm:text-[10px] font-medium leading-none mt-0.5" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                            {b.carMake}
-                          </span>
-                          <span className="text-[8px] opacity-90 leading-none mt-0.5 truncate">{b.serviceName}</span>
-                        </div>
+                    const endLabel = getBookingEndTime(b, services);
+                    const cardColor = getBookingColor(b);
+                    const width = 100 / pos.colCount;
+
+                    // Клик по карточке: вычисляем час сетки по Y-координате клика
+                    // относительно ВЕРХА КАРТОЧКИ, прибавляя базовый час начала записи
+                    // (иначе смещение считалось от 07:00 и давало неверный час слота).
+                    const ROW_HEIGHT = 56;
+                    const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+                      const startHour = Math.floor(timeToMinutes(b.time) / 60);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const offsetY = Math.max(0, e.clientY - rect.top);
+                      const hourOffset = Math.floor(offsetY / ROW_HEIGHT);
+                      const clickedHour = Math.min(
+                        JOURNAL_END_HOUR,
+                        Math.max(JOURNAL_START_HOUR, startHour + hourOffset)
                       );
-                    })}
+                      const clickedTime = `${String(clickedHour).padStart(2, '0')}:00`;
+                      onCellAction(b.date, clickedTime, b);
+                    };
+
+                    // Строки текста на карточке: без дублирования name/serviceName.
+                    const isPersonal = b.type === 'personal';
+                    const primaryText = isPersonal
+                      ? (b.serviceName || b.name)
+                      : (b.name || b.carMake || b.serviceName);
+                    const secondaryText = isPersonal
+                      ? (b.comment || '')
+                      : (b.serviceName && b.serviceName !== primaryText ? b.serviceName : (b.comment || ''));
+
+                    return (
+                      <div
+                        key={b.id}
+                        onClick={handleCardClick}
+                        className={`text-white overflow-hidden cursor-pointer z-10 flex flex-col leading-tight rounded-sm shadow-sm ${b.status === 'ready' ? 'opacity-60' : ''}`}
+                        style={{
+                          gridColumn: dayIdx + 2,
+                          gridRow: `${rowStart + 2} / span ${span}`,
+                          marginTop: `${topOffset}px`,
+                          height: `${height}px`,
+                          marginLeft: `calc(${pos.colIndex * width}% + 1px)`,
+                          width: `calc(${width}% - 2px)`,
+                          backgroundColor: cardColor,
+                        }}
+                      >
+                        <span className="text-[10px] font-semibold leading-tight whitespace-nowrap overflow-hidden px-1 pt-0.5">{b.time}–{endLabel}</span>
+                        <span className="text-[8px] sm:text-[9px] font-medium leading-none px-1 mt-0.5" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                          {primaryText}
+                        </span>
+                        {secondaryText && (
+                          <span className="text-[8px] opacity-90 leading-none px-1 mt-0.5 truncate">{secondaryText}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2338,9 +2805,13 @@ const JournalMode: React.FC<{
               {/* Save button */}
               <button
                 onClick={handleSaveSchedule}
-                className="w-full py-3 rounded bg-purple-700 text-white font-medium text-sm hover:opacity-90 transition"
+                disabled={isScheduleSaved}
+                className={`w-full py-3 rounded font-medium text-sm transition ${isScheduleSaved
+                  ? 'bg-purple-300 text-white/80 cursor-default'
+                  : 'bg-purple-700 text-white hover:opacity-90'
+                  }`}
               >
-                СОХРАНИТЬ
+                {isScheduleSaved ? 'СОХРАНЕНО' : 'СОХРАНИТЬ'}
               </button>
             </div>
           </div>
@@ -2363,6 +2834,52 @@ const JournalMode: React.FC<{
           onDelete={onDeleteClient}
           client={editingClient}
         />
+
+        {/* QR-код для клиентов */}
+        {isQrModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setIsQrModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-xs w-full text-center shadow-2xl relative animate-in fade-in zoom-in-95"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setIsQrModalOpen(false)}
+                className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition"
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+
+              <h3 className="font-bold text-gray-900 text-lg">Запись для клиентов</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-4">
+                Покажите QR-код клиенту для быстрой онлайн-записи
+              </p>
+
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://evgeniy261128.github.io/bvk-gbo-app/"
+                alt="QR-код записи"
+                className="w-48 h-48 mx-auto rounded-lg border border-gray-100 p-2 shadow-inner"
+              />
+
+              <div className="mt-4 bg-gray-100 rounded-lg px-3 py-2 text-xs text-gray-600 break-all">
+                evgeniy261128.github.io/bvk-gbo-app
+              </div>
+
+              <button
+                onClick={handleCopyQrLink}
+                className={`mt-3 w-full py-2.5 rounded-lg font-medium text-sm transition ${isQrLinkCopied
+                  ? 'bg-green-600 text-white'
+                  : 'bg-purple-700 text-white hover:opacity-90'
+                  }`}
+              >
+                {isQrLinkCopied ? '✓ Ссылка скопирована!' : 'Скопировать ссылку'}
+              </button>
+            </div>
+          </div>
+        )}
       </>
     );
   };
@@ -2435,7 +2952,7 @@ const App: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(DEFAULT_SCHEDULE);
-  const [actionSheetData, setActionSheetData] = useState<{ date: string; time: string } | null>(null);
+  const [actionSheetData, setActionSheetData] = useState<{ date: string; time: string; existingBooking?: Booking } | null>(null);
   const [isPersonalEventOpen, setIsPersonalEventOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
@@ -2546,6 +3063,8 @@ const App: React.FC = () => {
       .filter(Boolean) as Service[];
     const serviceName = selectedServiceObjs.map(s => s.name).join('; ');
     const totalPrice = selectedServiceObjs.reduce((sum, s) => sum + parsePrice(s.price), 0);
+    const durationMin = selectedServiceObjs.reduce((sum, s) => sum + (s.duration || 0), 0) || 60;
+    const startMin = timeToMinutes(selectedTime);
 
     const newBooking: Booking = {
       id: Date.now().toString(),
@@ -2557,8 +3076,10 @@ const App: React.FC = () => {
       carModel: contactForm.carModel || '',
       date: selectedDate,
       time: selectedTime,
-      name: contactForm.name,
-      phone: contactForm.phone,
+      endTime: minutesToTime(startMin + durationMin),
+      duration: durationMin,
+      name: contactForm.name || '',
+      phone: contactForm.phone || '',
       comment: contactForm.comment || '',
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -2650,15 +3171,24 @@ const App: React.FC = () => {
     setIsManualOpen(true);
   };
 
-  const handleCellAction = (date: string, time: string) => {
-    // На прошедшее время запись создавать нельзя
-    const [hourStr, minuteStr] = time.split(':');
-    const slot = parseLocalDate(date);
-    slot.setHours(parseInt(hourStr, 10) || 0, parseInt(minuteStr, 10) || 0, 0, 0);
-    if (slot.getTime() < Date.now()) {
-      return; // слот в прошлом — не открываем меню создания записи
+  const handleCellAction = (date: string, time: string, existingBooking?: Booking) => {
+    // На прошедшее время запись создавать нельзя (но существующую запись открыть можно)
+    if (!existingBooking) {
+      const [hourStr, minuteStr] = time.split(':');
+      const slot = parseLocalDate(date);
+      slot.setHours(parseInt(hourStr, 10) || 0, parseInt(minuteStr, 10) || 0, 0, 0);
+      if (slot.getTime() < Date.now()) {
+        return; // слот в прошлом — не открываем меню создания записи
+      }
     }
-    setActionSheetData({ date, time });
+    setActionSheetData({ date, time, existingBooking });
+  };
+
+  const handleActionSheetEditExisting = () => {
+    if (actionSheetData?.existingBooking) {
+      setDetailsBooking(actionSheetData.existingBooking);
+    }
+    setActionSheetData(null);
   };
 
   const handleActionSheetBookClient = () => {
@@ -2779,7 +3309,6 @@ const App: React.FC = () => {
               onDeleteBooking={handleDeleteBooking}
               services={services}
               onUpdateServices={handleUpdateServices}
-              workingHours={workingHours}
               scheduleSettings={scheduleSettings}
               onUpdateSchedule={handleUpdateSchedule}
               clients={clients}
@@ -2864,7 +3393,10 @@ const App: React.FC = () => {
         <ActionBottomSheet
           isOpen={!!actionSheetData}
           time={actionSheetData?.time || ''}
+          dateLabel={actionSheetData ? formatDateLabel(actionSheetData.date) : ''}
+          existingBooking={actionSheetData?.existingBooking || null}
           onClose={() => setActionSheetData(null)}
+          onEditExisting={handleActionSheetEditExisting}
           onBookClient={handleActionSheetBookClient}
           onCreatePersonal={handleActionSheetCreatePersonal}
         />
