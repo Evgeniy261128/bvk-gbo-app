@@ -4,6 +4,7 @@ import {
   formatDateTime, formatDateLabel, parsePrice,
   BrandType, Service, Booking, BookingStatus, AppMode, ScheduleSettings, Client,
 } from './types';
+import { Car } from 'lucide-react';
 
 
 // ===== Date helpers (timezone-safe) =====
@@ -90,6 +91,48 @@ function loadClients(): Client[] {
 
 function saveClients(clients: Client[]): void {
   localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients, null, 2));
+}
+
+// ===== localStorage helpers for client PWA profile & own bookings =====
+const CLIENT_PROFILE_KEY = 'bvk_client_profile';
+const CLIENT_OWN_BOOKINGS_KEY = 'bvk_my_bookings';
+
+interface ClientProfile {
+  name: string;
+  phone: string;
+  carMake: string;
+  carModel: string;
+}
+
+function loadClientProfile(): ClientProfile | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CLIENT_PROFILE_KEY) || 'null');
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      name: parsed.name || '',
+      phone: parsed.phone || '',
+      carMake: parsed.carMake || '',
+      carModel: parsed.carModel || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveClientProfile(profile: ClientProfile): void {
+  localStorage.setItem(CLIENT_PROFILE_KEY, JSON.stringify(profile));
+}
+
+function loadOwnBookings(): Booking[] {
+  try {
+    return JSON.parse(localStorage.getItem(CLIENT_OWN_BOOKINGS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveOwnBookings(bookings: Booking[]): void {
+  localStorage.setItem(CLIENT_OWN_BOOKINGS_KEY, JSON.stringify(bookings, null, 2));
 }
 
 // ===== Schedule settings + working hours =====
@@ -781,10 +824,10 @@ const StepContact: React.FC<{
           </p>
         )}
 
-        <p className="text-sm text-gray-500 mb-2">Укажите ваше имя и марку автомобиля</p>
+        <p className="text-sm text-gray-500 mb-2">Укажите ваши данные и автомобиль</p>
 
         <div className="relative">
-          <input type="text" placeholder="Например: Алексей (Kia Rio)" value={formData.name || ''}
+          <input type="text" placeholder="Ваше имя" value={formData.name || ''}
             onChange={e => onChange('name', e.target.value.replace(/[^a-zA-Zа-яА-ЯёЁ0-9\s-]/g, ''))} className={inputCls} />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">👤</span>
         </div>
@@ -793,6 +836,19 @@ const StepContact: React.FC<{
           <input type="tel" placeholder="+7..." value={formData.phone || ''}
             onChange={e => onChange('phone', e.target.value)} className={inputCls} />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">📞</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="relative">
+            <input type="text" placeholder="Марка (напр. Kia)" value={formData.carMake || ''}
+              onChange={e => onChange('carMake', e.target.value)} className={inputCls} />
+            <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <input type="text" placeholder="Модель (напр. Rio)" value={formData.carModel || ''}
+              onChange={e => onChange('carModel', e.target.value)} className={inputCls} />
+            <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         <div className="relative">
@@ -1250,7 +1306,7 @@ const ManualAddModal: React.FC<{
             {step === 'new_client' && 'Новый клиент'}
             {step === 'services' && clientTitle}
           </span>
-          <button onClick={onClose} className="text-white/80 hover:text-white text-lg leading-none">×</button>
+          <button onClick={() => { setSearchQuery(''); onClose(); }} className="text-white/80 hover:text-white text-lg leading-none">×</button>
         </div>
 
         {step === 'client' && (
@@ -1353,7 +1409,7 @@ const ManualAddModal: React.FC<{
 
         <div className="p-3 border-t border-gray-300 shrink-0">
           {step === 'client' && (
-            <button onClick={onClose} className="w-full py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
+            <button onClick={() => { setSearchQuery(''); onClose(); }} className="w-full py-2.5 rounded bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition">
               Отмена
             </button>
           )}
@@ -2893,7 +2949,8 @@ const App: React.FC = () => {
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [contactForm, setContactForm] = useState<Partial<Booking>>({});
+  const [contactForm, setContactForm] = useState<Partial<Booking>>({ name: '', phone: '', carMake: '', carModel: '', comment: '' });
+  const [ownBookings, setOwnBookings] = useState<Booking[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [currentBooking, setCurrentBooking] = useState<Booking | null>(null);
   const [isTimeSelectionOpen, setIsTimeSelectionOpen] = useState(false);
@@ -2969,6 +3026,19 @@ const App: React.FC = () => {
     setClients(loadedClients);
     const loadedSchedule = loadScheduleSettings();
     setScheduleSettings(loadedSchedule);
+
+    // Восстанавливаем запомненный профиль клиента и его собственные записи (PWA, без регистрации)
+    const savedProfile = loadClientProfile();
+    if (savedProfile) {
+      setContactForm(prev => ({
+        ...prev,
+        name: savedProfile.name || prev.name || '',
+        phone: savedProfile.phone || prev.phone || '',
+        carMake: savedProfile.carMake || prev.carMake || '',
+        carModel: savedProfile.carModel || prev.carModel || '',
+      }));
+    }
+    setOwnBookings(loadOwnBookings());
 
     const todayStr = toLocalDateString(new Date());
     setSelectedDate(todayStr);
@@ -3063,8 +3133,12 @@ const App: React.FC = () => {
       .filter(Boolean) as Service[];
     const serviceName = selectedServiceObjs.map(s => s.name).join('; ');
     const totalPrice = selectedServiceObjs.reduce((sum, s) => sum + parsePrice(s.price), 0);
-    const durationMin = selectedServiceObjs.reduce((sum, s) => sum + (s.duration || 0), 0) || 60;
-    const startMin = timeToMinutes(selectedTime);
+    const totalDuration = selectedServiceObjs.reduce((sum, s) => sum + (s.duration || 0), 0) || 60;
+
+    const clientName = (contactForm.name || '').trim();
+    const clientPhone = (contactForm.phone || '').trim();
+    const clientCarMake = (contactForm.carMake || '').trim();
+    const clientCarModel = (contactForm.carModel || '').trim();
 
     const newBooking: Booking = {
       id: Date.now().toString(),
@@ -3072,14 +3146,14 @@ const App: React.FC = () => {
       services: selectedServices,
       serviceName,
       totalPrice,
-      carMake: contactForm.carMake || '',
-      carModel: contactForm.carModel || '',
+      carMake: clientCarMake,
+      carModel: clientCarModel,
       date: selectedDate,
       time: selectedTime,
-      endTime: minutesToTime(startMin + durationMin),
-      duration: durationMin,
-      name: contactForm.name || '',
-      phone: contactForm.phone || '',
+      endTime: minutesToTime(timeToMinutes(selectedTime) + totalDuration),
+      duration: totalDuration,
+      name: clientName,
+      phone: clientPhone,
       comment: contactForm.comment || '',
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -3089,24 +3163,60 @@ const App: React.FC = () => {
     setBookings(updated);
     saveBookings(updated);
 
+    // Запоминаем профиль клиента, чтобы при повторном визите не вводить данные заново
+    saveClientProfile({ name: clientName, phone: clientPhone, carMake: clientCarMake, carModel: clientCarModel });
+
+    // Сохраняем собственную запись клиента для блока «Ваша ближайшая запись»
+    const ownNext = [...loadOwnBookings(), newBooking];
+    saveOwnBookings(ownNext);
+    setOwnBookings(ownNext);
+
+    // Автоматически добавляем/обновляем клиента в базе Журнала мастера (по совпадению телефона)
+    const phoneDigitsKey = clientPhone.replace(/\D/g, '');
+    if (phoneDigitsKey.length >= 10) {
+      const existingClient = clients.find(c => (c.phone || '').replace(/\D/g, '') === phoneDigitsKey);
+      if (existingClient) {
+        handleSaveClient({
+          ...existingClient,
+          name: clientName || existingClient.name,
+          carMake: clientCarMake || existingClient.carMake,
+          carModel: clientCarModel || existingClient.carModel,
+        });
+      } else {
+        handleSaveClient({
+          id: Date.now().toString(),
+          name: clientName,
+          phone: clientPhone,
+          carMake: clientCarMake,
+          carModel: clientCarModel,
+        });
+      }
+    }
+
     setCurrentBooking(newBooking);
     setIsSubmitted(true);
 
     setSelectedServices([]);
     setSelectedTime(null);
     setSelectedDate('');
-    setContactForm({});
+    // Очищаем только комментарий — имя, телефон и авто остаются запомненными
+    setContactForm(prev => ({ ...prev, comment: '' }));
     setIsTimeSelectionOpen(false);
   };
 
   const handleCancelNearest = () => {
+    const ownIds = new Set(ownBookings.map(b => b.id));
     const earliest = [...bookings]
-      .filter(b => !b.id.startsWith('demo'))
+      .filter(b => !b.id.startsWith('demo') && ownIds.has(b.id))
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
     if (earliest) {
       const updated = bookings.filter(b => b.id !== earliest.id);
       setBookings(updated);
       saveBookings(updated);
+
+      const ownUpdated = loadOwnBookings().filter(b => b.id !== earliest.id);
+      saveOwnBookings(ownUpdated);
+      setOwnBookings(ownUpdated);
     }
   };
 
@@ -3257,10 +3367,11 @@ const App: React.FC = () => {
   };
 
   const nearestUserBooking = useMemo(() => {
-    const userBookings = bookings.filter(b => !b.id.startsWith('demo'));
+    const ownIds = new Set(ownBookings.map(b => b.id));
+    const userBookings = bookings.filter(b => ownIds.has(b.id));
     if (userBookings.length === 0) return null;
     return [...userBookings].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
-  }, [bookings]);
+  }, [bookings, ownBookings]);
 
   const canBook = selectedDate && selectedTime && selectedServices.length > 0 && contactForm.name && contactForm.phone;
 
